@@ -37,9 +37,10 @@ for entry in "${CLIPS[@]}"; do
     -o "$OUT" \
     --target ffmpeg \
     --video-codec libx264 \
+    --video-bitrate 1024 \
     --fps "$fps" \
     -w 480 -h 480 \
-    2>&1 | grep -vE '^$' | head -40 || true
+    2>&1 | grep -E 'error|Error|warning|frame [0-9]|done|complete' | head -20 || true
 
   if [ -f "$OUT" ]; then
     SIZE=$(du -sh "$OUT" | cut -f1)
