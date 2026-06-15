@@ -44,7 +44,37 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   const [selectedOpt, setSelectedOpt] = useState<string | null>(null);
   const [matchMap, setMatchMap] = useState<Record<string, string>>({});
   const [fillValue, setFillValue] = useState("");
+  const [muted, setMuted] = useState(false);
 
+  // ── Audio refs (initialised after mount) ─────────────────────────────────
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  const sfxRef = useRef<Record<string, HTMLAudioElement>>({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const bg = new Audio("/audio/sfx/bg-music.mp3");
+    bg.loop = true;
+    bg.volume = 0.12;
+    bgMusicRef.current = bg;
+    sfxRef.current = {
+      correct:   new Audio("/audio/sfx/correct.mp3"),
+      wrong:     new Audio("/audio/sfx/wrong.mp3"),
+      celebrate: new Audio("/audio/sfx/celebrate.mp3"),
+      question:  new Audio("/audio/sfx/question.mp3"),
+    };
+    return () => {
+      bg.pause();
+      Object.values(sfxRef.current).forEach((a) => a.pause());
+    };
+  }, []);
+
+  // Propagate mute toggle to all audio elements
+  useEffect(() => {
+    if (bgMusicRef.current) bgMusicRef.current.muted = muted;
+    Object.values(sfxRef.current).forEach((a) => { a.muted = muted; });
+  }, [muted]);
+
+  // ── Narrator hook ─────────────────────────────────────────────────────────
   const narrator = useLessonNarrator({
     title: lesson.title,
     objective: lesson.objective,
@@ -55,7 +85,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
 
   const clip = clipForPhase(narrator.phase, narrator.feedback);
 
-  // Swap video src when clip changes — mp4 primary (server renders libx264)
+  // Swap video src when clip changes
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
@@ -64,6 +94,41 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
     vid.play().catch(() => {});
   }, [clip]);
 
+  // BG music: start when lesson starts, stop on complete
+  useEffect(() => {
+    const bg = bgMusicRef.current;
+    if (!bg) return;
+    if (started && narrator.phase !== "complete") {
+      bg.play().catch(() => {});
+    } else {
+      bg.pause();
+      bg.currentTime = 0;
+    }
+  }, [started, narrator.phase]);
+
+  // Phase-triggered sound effects
+  const prevPhaseRef = useRef<string>("idle");
+  const prevFeedbackRef = useRef<"correct" | "wrong" | null>(null);
+  useEffect(() => {
+    const sfx = sfxRef.current;
+    const { phase, feedback } = narrator;
+
+    if (phase === "asking" && prevPhaseRef.current !== "asking") {
+      sfx.question?.play().catch(() => {});
+    }
+    if (phase === "feedback" && feedback !== prevFeedbackRef.current) {
+      if (feedback === "correct") sfx.correct?.play().catch(() => {});
+      else if (feedback === "wrong") sfx.wrong?.play().catch(() => {});
+    }
+    if (phase === "complete" && prevPhaseRef.current !== "complete") {
+      sfx.celebrate?.play().catch(() => {});
+    }
+
+    prevPhaseRef.current = phase;
+    prevFeedbackRef.current = feedback;
+  }, [narrator.phase, narrator.feedback]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleStart = useCallback(() => {
     setStarted(true);
     narrator.start((score) => {
@@ -107,7 +172,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
     setMatchMap({});
   }, [narrator, matchMap]);
 
-  // reset selection state when activity changes
+  // Reset selection state when activity changes
   useEffect(() => {
     setSelectedOpt(null);
     setFillValue("");
@@ -118,7 +183,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   const isWaiting = narrator.phase === "waiting-answer";
   const isAsking = narrator.phase === "asking" || isWaiting;
 
-  // ── Completion screen ──────────────────────────────────────────────────────
+  // ── Completion screen ─────────────────────────────────────────────────────
   if (narrator.phase === "complete") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 space-y-6">
@@ -188,20 +253,29 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
 
   return (
     <div className="flex flex-col items-center px-2 py-4 space-y-4 min-h-[80vh]">
-      {/* Progress dots */}
-      <div className="flex gap-2 justify-center">
-        {Array.from({ length: totalActs }).map((_, i) => (
-          <div
-            key={i}
-            className={`w-3 h-3 rounded-full transition-colors ${
-              i < narrator.actIdx
-                ? "bg-green-500"
-                : i === narrator.actIdx && isAsking
-                ? "bg-orange-400 scale-125"
-                : "bg-gray-200"
-            }`}
-          />
-        ))}
+      {/* Header row: progress dots + mute button */}
+      <div className="w-full max-w-md flex items-center justify-between">
+        <div className="flex gap-2">
+          {Array.from({ length: totalActs }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-3 h-3 rounded-full transition-colors ${
+                i < narrator.actIdx
+                  ? "bg-green-500"
+                  : i === narrator.actIdx && isAsking
+                  ? "bg-orange-400 scale-125"
+                  : "bg-gray-200"
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setMuted((m) => !m)}
+          className="text-gray-400 hover:text-gray-600 text-2xl transition-colors"
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
       </div>
 
       {/* Mascot video */}
@@ -351,7 +425,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
         </div>
       )}
 
-      {/* Stop button */}
+      {/* Exit button */}
       <button
         onClick={() => { narrator.stop(); router.back(); }}
         className="mt-auto text-sm text-gray-400 hover:text-gray-600 underline"

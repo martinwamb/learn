@@ -120,8 +120,12 @@ export function useLessonNarrator(lesson: LessonData) {
       utt.rate = 0.88;
       utt.pitch = 1.1;
       utt.volume = 1.0;
-      utt.onend = () => resolve();
-      utt.onerror = () => resolve();
+      // Safety net: speechSynthesis.onend sometimes silently never fires (Chrome/Safari bug).
+      // Estimate reading time at ~65ms/char (rate=0.88 ≈ 150 wpm), min 1.5s, max 30s.
+      const ms = Math.min(Math.max(text.length * 65, 1500), 30_000);
+      const t = setTimeout(() => resolve(), ms);
+      utt.onend = () => { clearTimeout(t); resolve(); };
+      utt.onerror = () => { clearTimeout(t); resolve(); };
       synth.speak(utt);
     });
   }, []);
@@ -136,7 +140,12 @@ export function useLessonNarrator(lesson: LessonData) {
     for (let i = 0; i < blocks.length; i++) {
       if (cancelledRef.current) return;
       const block = blocks[i];
-      setState((s) => ({ ...s, phase: "narrating-content", contentIdx: i }));
+      setState((s) => ({
+        ...s,
+        phase: "narrating-content",
+        contentIdx: i,
+        currentText: block.text ?? block.instruction ?? block.example ?? "",
+      }));
 
       if (block.type === "introduction" && block.text) {
         await speak(block.text);
