@@ -30,7 +30,7 @@ async function callOllama(prompt: string): Promise<string> {
       model: OLLAMA_MODEL,
       prompt,
       stream: false,
-      options: { temperature: 0.7, num_predict: 1500 },
+      options: { temperature: 0.7, num_predict: 700 },
     }),
   });
   if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
