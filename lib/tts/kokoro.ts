@@ -15,13 +15,12 @@ export async function generateSegment(
   outputPath: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Kokoro CLI: python -m kokoro --text "..." --voice af_heart --output /tmp/seg.wav
-    // Or if kokoro is installed as a script: kokoro --text "..." ...
+    // Kokoro 0.9.x CLI flags: -t text, -m voice, -o output_file
     const args = [
       "-m", "kokoro",
-      "--text", text,
-      "--voice", voice,
-      "--output", outputPath,
+      "-t", text,
+      "-m", voice,
+      "-o", outputPath,
     ];
     const proc = spawn(PYTHON_BIN, args);
     let stderr = "";
