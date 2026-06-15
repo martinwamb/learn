@@ -4,7 +4,8 @@ import path from "path";
 import os from "os";
 import type { KokoroVoice } from "./voice-map";
 
-const KOKORO_SCRIPT = process.env.KOKORO_SCRIPT_PATH ?? "kokoro";
+// Use venv python when available (server), fall back to system python3
+const PYTHON_BIN = process.env.KOKORO_PYTHON ?? "/home/admin/kokoro-venv/bin/python3";
 
 // Generates a WAV file for the given text using the Kokoro Python CLI.
 // Returns the path to the WAV file, or throws on failure.
@@ -22,7 +23,7 @@ export async function generateSegment(
       "--voice", voice,
       "--output", outputPath,
     ];
-    const proc = spawn("python3", args);
+    const proc = spawn(PYTHON_BIN, args);
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d.toString(); });
     proc.on("close", (code) => {
@@ -41,4 +42,4 @@ export async function textToWav(text: string, voice: KokoroVoice, index: number)
   return outputPath;
 }
 
-export { KOKORO_SCRIPT };
+export { PYTHON_BIN };
