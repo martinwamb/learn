@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render Synfig SIF files → WebM for the lesson player mascot.
+# Render Synfig SIF files → MP4 for the lesson player mascot.
 # Run once after deploy: npm run render-animations
 set -e
 
@@ -11,50 +11,41 @@ python3 "$(dirname "$0")/create-animations.py"
 
 mkdir -p "$OUT_DIR"
 
+# name:fps:duration_seconds
 CLIPS=(
-  "idle:loop:24:3"
-  "talking:loop:24:2"
-  "thinking:loop:24:2"
-  "correct:once:24:2"
-  "wrong:once:24:2"
-  "celebrate:once:24:3"
+  "idle:24:3"
+  "talking:24:2"
+  "thinking:24:2"
+  "correct:24:2"
+  "wrong:24:2"
+  "celebrate:24:3"
 )
 
 for entry in "${CLIPS[@]}"; do
-  IFS=':' read -r name _mode fps _dur <<< "$entry"
+  IFS=':' read -r name fps _dur <<< "$entry"
   SIF="$SIF_DIR/${name}.sif"
-  WEBM="$OUT_DIR/${name}.webm"
+  OUT="$OUT_DIR/${name}.mp4"
 
   if [ ! -f "$SIF" ]; then
     echo "  [skip] $SIF not found"
     continue
   fi
 
-  echo "  Rendering $name..."
+  echo "  Rendering $name.mp4 ..."
   synfig \
     -i "$SIF" \
-    -o "$WEBM" \
+    -o "$OUT" \
     --target ffmpeg \
-    --video-codec libvpx-vp9 \
+    --video-codec libx264 \
     --fps "$fps" \
     -w 480 -h 480 \
-    2>&1 | grep -E 'error|Error|frame|done|warning' || true
+    2>&1 | grep -vE '^$' | head -40 || true
 
-  if [ -f "$WEBM" ]; then
-    SIZE=$(du -sh "$WEBM" | cut -f1)
-    echo "    ✓ $WEBM ($SIZE)"
+  if [ -f "$OUT" ]; then
+    SIZE=$(du -sh "$OUT" | cut -f1)
+    echo "    OK  $OUT ($SIZE)"
   else
-    echo "    ✗ $WEBM not created — trying mp4 fallback"
-    MP4="$OUT_DIR/${name}.mp4"
-    synfig \
-      -i "$SIF" \
-      -o "$MP4" \
-      --target ffmpeg \
-      --video-codec libx264 \
-      --fps "$fps" \
-      -w 480 -h 480 \
-      2>&1 | grep -E 'error|Error|frame|done|warning' || true
-    [ -f "$MP4" ] && echo "    ✓ $MP4 (mp4 fallback)" || echo "    ✗ render failed"
+    echo "    FAIL  $OUT not created"
   fi
 done
 

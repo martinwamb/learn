@@ -55,20 +55,13 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
 
   const clip = clipForPhase(narrator.phase, narrator.feedback);
 
-  // Swap video src when clip changes
+  // Swap video src when clip changes — mp4 primary (server renders libx264)
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
-    const webm = `/animations/${clip}.webm`;
-    const mp4 = `/animations/${clip}.mp4`;
-    // try webm first, fall back to mp4
-    vid.src = webm;
+    vid.src = `/animations/${clip}.mp4`;
     vid.load();
-    vid.play().catch(() => {
-      vid.src = mp4;
-      vid.load();
-      vid.play().catch(() => {});
-    });
+    vid.play().catch(() => {});
   }, [clip]);
 
   const handleStart = useCallback(() => {
@@ -166,7 +159,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
       <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 space-y-8">
         <video
           ref={videoRef}
-          src="/animations/idle.webm"
+          src="/animations/idle.mp4"
           className="w-52 h-52 rounded-full object-cover shadow-xl border-4 border-yellow-300"
           autoPlay
           playsInline

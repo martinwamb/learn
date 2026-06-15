@@ -1,546 +1,329 @@
 #!/usr/bin/env python3
 """
-Generate Synfig .sif XML files for Jina the Giraffe mascot.
-6 animation states rendered to WebM by render-animations.sh.
-
-Coordinate system: -4 to 4 in x and y (0,0 = center).
-Y axis: positive = UP.  Canvas: 480x480 px, 60px/unit.
+Generate Synfig .sif files for Jina the Giraffe.
+Uses ONLY circle and rectangle layers — no group layers, no composites, no bline regions.
+Each animation shares the same time-key set so waypoint merging is trivial.
 """
-import os, math, textwrap
+import os, math
 
 OUT = "/tmp/synfig-anim"
 os.makedirs(OUT, exist_ok=True)
 
-# ── colour palette ───────────────────────────────────────────────────────────
-C = {
-    "bg":       (0.22, 0.75, 0.62),   # teal
-    "shadow":   (0.15, 0.55, 0.45),
-    "body":     (0.97, 0.76, 0.22),   # giraffe yellow
-    "spot":     (0.58, 0.32, 0.08),   # brown spots
-    "hooves":   (0.30, 0.18, 0.05),
-    "nose_tip": (0.82, 0.55, 0.25),
-    "ear_in":   (0.98, 0.72, 0.78),   # pink inner ear
-    "eye_w":    (1.00, 1.00, 1.00),
-    "pupil":    (0.08, 0.04, 0.02),
-    "shine":    (1.00, 1.00, 1.00),
-    "mouth":    (0.55, 0.28, 0.06),
-    "star":     (1.00, 0.92, 0.10),
-    "star2":    (1.00, 0.55, 0.10),
-    "green_bg": (0.20, 0.68, 0.45),
-}
-
-# ── XML helpers ──────────────────────────────────────────────────────────────
-def vec(x, y):
-    return f"<vector><x>{x:.4f}</x><y>{y:.4f}</y></vector>"
-
-def color(r, g, b, a=1.0):
+# ── colours ───────────────────────────────────────────────────────────────────
+def col(r, g, b, a=1.0):
     return f"<color><r>{r:.4f}</r><g>{g:.4f}</g><b>{b:.4f}</b><a>{a:.4f}</a></color>"
 
-def real(v):
-    return f"<real value=\"{v:.6f}\"/>"
+BODY   = col(0.97, 0.76, 0.22)
+SPOT   = col(0.58, 0.32, 0.08)
+HOOVES = col(0.30, 0.18, 0.05)
+NOSE   = col(0.90, 0.62, 0.30)
+EAR_IN = col(0.98, 0.72, 0.78)
+EYE_W  = col(1.00, 1.00, 1.00)
+PUPIL  = col(0.08, 0.04, 0.02)
+SHINE  = col(1.00, 1.00, 1.00)
+BG     = col(0.22, 0.75, 0.62)
+SHADOW = col(0.12, 0.52, 0.42)
+STAR_Y = col(1.00, 0.92, 0.10)
+STAR_O = col(1.00, 0.55, 0.10)
+MOUTH  = col(0.40, 0.18, 0.04)
 
-def boolean(v):
-    return f"<bool value=\"{'true' if v else 'false'}\"/>"
+# ── XML primitives ─────────────────────────────────────────────────────────────
+def V(x, y):
+    return f"<vector><x>{x:.5f}</x><y>{y:.5f}</y></vector>"
 
-def integer(v):
-    return f"<integer value=\"{v}\"/>"
+def circle_xml(desc, color, ox, oy, r, orig_wps=None, rad_wps=None, amount=1.0):
+    """
+    orig_wps : list[(time_str, x, y)]  → animated origin
+    rad_wps  : list[(time_str, r)]     → animated radius
+    """
+    if orig_wps:
+        body = "".join(
+            f'<waypoint time="{t}" before="linear" after="linear">{V(x,y)}</waypoint>'
+            for t, x, y in orig_wps)
+        o = f'<animated type="vector">{body}</animated>'
+    else:
+        o = V(ox, oy)
 
-def param(name, content):
-    return f"<param name=\"{name}\">{content}</param>"
+    if rad_wps:
+        body = "".join(
+            f'<waypoint time="{t}" before="linear" after="linear">'
+            f'<real value="{rv:.5f}"/></waypoint>'
+            for t, rv in rad_wps)
+        rv_xml = f'<animated type="real">{body}</animated>'
+    else:
+        rv_xml = f'<real value="{r:.5f}"/>'
 
-def waypoint(time, interp, content):
-    return (f'<waypoint time="{time}" before="{interp}" after="{interp}">'
-            f'{content}</waypoint>')
+    return (f'<layer type="circle" desc="{desc}">'
+            f'<param name="z_depth"><real value="0.0"/></param>'
+            f'<param name="amount"><real value="{amount:.2f}"/></param>'
+            f'<param name="blend_method"><integer value="0"/></param>'
+            f'<param name="color">{color}</param>'
+            f'<param name="origin">{o}</param>'
+            f'<param name="invert"><bool value="false"/></param>'
+            f'<param name="radius">{rv_xml}</param>'
+            f'</layer>')
 
-def animated_vec(waypoints):
-    wps = "".join(waypoint(t, ip, vec(x, y)) for t, ip, x, y in waypoints)
-    return f'<animated type="vector">{wps}</animated>'
+def rect_xml(desc, color, x1, y1, x2, y2, p1_wps=None, p2_wps=None):
+    """
+    p1_wps : list[(time_str, x, y)]  → animated point1
+    p2_wps : list[(time_str, x, y)]  → animated point2
+    """
+    if p1_wps:
+        body = "".join(
+            f'<waypoint time="{t}" before="linear" after="linear">{V(x,y)}</waypoint>'
+            for t, x, y in p1_wps)
+        p1 = f'<animated type="vector">{body}</animated>'
+    else:
+        p1 = V(x1, y1)
 
-def animated_real(waypoints):
-    wps = "".join(waypoint(t, ip, real(v)) for t, ip, v in waypoints)
-    return f'<animated type="real">{wps}</animated>'
+    if p2_wps:
+        body = "".join(
+            f'<waypoint time="{t}" before="linear" after="linear">{V(x,y)}</waypoint>'
+            for t, x, y in p2_wps)
+        p2 = f'<animated type="vector">{body}</animated>'
+    else:
+        p2 = V(x2, y2)
 
-def animated_color(waypoints):
-    wps = "".join(waypoint(t, ip, color(*c)) for t, ip, c in waypoints)
-    return f'<animated type="color">{wps}</animated>'
+    return (f'<layer type="rectangle" desc="{desc}">'
+            f'<param name="z_depth"><real value="0.0"/></param>'
+            f'<param name="amount"><real value="1.0"/></param>'
+            f'<param name="blend_method"><integer value="0"/></param>'
+            f'<param name="color">{color}</param>'
+            f'<param name="point1">{p1}</param>'
+            f'<param name="point2">{p2}</param>'
+            f'<param name="expand"><real value="0.0"/></param>'
+            f'<param name="invert"><bool value="false"/></param>'
+            f'</layer>')
 
-# ── layer builders ───────────────────────────────────────────────────────────
-def circle_layer(desc, col, ox, oy, radius,
-                 origin_anim=None, radius_anim=None, amount=1.0):
-    o = animated_vec(origin_anim) if origin_anim else vec(ox, oy)
-    r = animated_real(radius_anim) if radius_anim else real(radius)
-    return f"""
-<layer type="circle" desc="{desc}">
-  {param("z_depth", real(0))}
-  {param("amount", real(amount))}
-  {param("blend_method", integer(0))}
-  {param("color", color(*col))}
-  {param("origin", o)}
-  {param("invert", boolean(False))}
-  {param("radius", r)}
-</layer>"""
+def canvas_xml(end_time, fps, layers):
+    return (f'<?xml version="1.0" encoding="UTF-8"?>'
+            f'<canvas version="1.2" width="480" height="480" '
+            f'fps="{fps}" begin-time="0" end-time="{end_time}" '
+            f'bgcolor="0 0 0 1"><name>Jina the Giraffe</name>'
+            + "".join(layers) + '</canvas>')
 
-def rect_layer(desc, col, x1, y1, x2, y2, origin_anim=None):
-    if origin_anim:
-        # rect doesn't animate easily — wrap in translate group instead
-        pass
-    return f"""
-<layer type="rectangle" desc="{desc}">
-  {param("z_depth", real(0))}
-  {param("amount", real(1))}
-  {param("blend_method", integer(0))}
-  {param("color", color(*col))}
-  {param("point1", vec(x1, y1))}
-  {param("point2", vec(x2, y2))}
-  {param("expand", real(0))}
-  {param("invert", boolean(False))}
-</layer>"""
+# ── Animation builder ────────────────────────────────────────────────────────
+#
+# Each clip passes per-keyframe offset lists where every list shares the SAME
+# time strings — element-wise addition, no interpolation needed.
+#
+# body_ofs  : [(t, dx, dy), ...]  applied to body circle + body spots
+# head_ofs  : [(t, dx, dy), ...]  added ON TOP of body_ofs for head parts
+# ear_l_ofs : [(t, dx, dy), ...]  added ON TOP of body_ofs for left ear
+# ear_r_ofs : [(t, dx, dy), ...]  added ON TOP of body_ofs for right ear
+# blink     : [(t, r), ...]       eye-white radius animation (independent timing)
+# stars     : bool                animated star burst
 
-def region_layer(desc, col, points):
-    """Closed polygon filled region."""
-    vlist = "".join(f"<vector><x>{x:.4f}</x><y>{y:.4f}</y></vector>" for x, y in points)
-    return f"""
-<layer type="region" desc="{desc}">
-  {param("z_depth", real(0))}
-  {param("amount", real(1))}
-  {param("blend_method", integer(0))}
-  {param("color", color(*col))}
-  <param name="vertices"><static_list type="vector">{vlist}</static_list></param>
-  {param("origin", vec(0, 0))}
-  {param("invert", boolean(False))}
-</layer>"""
+# Giraffe base positions (1 unit = 60 px, canvas ±4 units):
+HX, HY = 0.0, 2.18   # head centre
+BX, BY = 0.0, -1.05  # body centre
 
-def group_layer(desc, children, offset_anim=None, ox=0, oy=0,
-                angle_anim=None, scale_anim=None):
-    off = animated_vec(offset_anim) if offset_anim else vec(ox, oy)
-    ang = animated_real(angle_anim) if angle_anim else real(0)
-    sc  = animated_real(scale_anim) if scale_anim else real(1)
-    inner = "".join(children)
-    return f"""
-<layer type="group" desc="{desc}">
-  {param("z_depth", real(0))}
-  {param("amount", real(1))}
-  {param("blend_method", integer(0))}
-  <param name="transformation">
-    <composite type="transformation">
-      <param name="offset">{off}</param>
-      <param name="angle">{ang}</param>
-      <param name="skew_angle">{real(0)}</param>
-      <param name="scale">{vec(1 if scale_anim is None else 1, 1 if scale_anim is None else 1)}</param>
-    </composite>
-  </param>
-  <param name="canvas"><canvas>{inner}</canvas></param>
-  {param("time_dilation", real(1))}
-  {param("time_offset", real(0))}
-  {param("children_lock", boolean(False))}
-  {param("outline_grow", real(0))}
-</layer>"""
+def giraffe(
+    end_time, fps,
+    body_ofs=None,
+    head_ofs=None,
+    ear_l_ofs=None,
+    ear_r_ofs=None,
+    blink=None,
+    stars=False,
+):
+    bo = body_ofs or []
+    ho = head_ofs or []
 
-# ── reusable character parts ─────────────────────────────────────────────────
-def bg_layer():
-    return rect_layer("Background", C["bg"], -4, -4, 4, 4)
+    def merge(a, b):
+        """Element-wise sum of two same-length offset lists."""
+        if not a and not b:
+            return []
+        base = a if a else [(t, 0.0, 0.0) for t, dx, dy in b]
+        extra = b if b else [(t, 0.0, 0.0) for t, dx, dy in a]
+        return [(base[i][0],
+                 base[i][1] + extra[i][1],
+                 base[i][2] + extra[i][2])
+                for i in range(len(base))]
 
-def shadow_layer():
-    """Ellipse shadow on ground."""
-    return circle_layer("Shadow", C["shadow"], 0.0, -3.1, 0.8,
-                        radius_anim=[("0s","linear",0.8),("3s","linear",0.8)],
-                        amount=0.5)
+    body_combined  = bo
+    head_combined  = merge(bo, ho)
+    ear_l_combined = merge(bo, ear_l_ofs or [])
+    ear_r_combined = merge(bo, ear_r_ofs or [])
 
-def legs():
-    legs_list = [
-        rect_layer("Leg FL", C["body"],   -0.55, -1.8, -0.25, -3.0),
-        rect_layer("Leg FR", C["body"],    0.05, -1.8,  0.35, -3.0),
-        rect_layer("Leg BL", C["body"],   -0.85, -1.7, -0.55, -2.85),
-        rect_layer("Leg BR", C["body"],    0.35, -1.7,  0.65, -2.85),
-        rect_layer("Hoof FL", C["hooves"],-0.55, -2.85,-0.25, -3.05),
-        rect_layer("Hoof FR", C["hooves"], 0.05, -2.85, 0.35, -3.05),
-        rect_layer("Hoof BL", C["hooves"],-0.85, -2.70,-0.55, -2.90),
-        rect_layer("Hoof BR", C["hooves"], 0.35, -2.70, 0.65, -2.90),
-    ]
-    return "".join(legs_list)
+    def orig(bx, by, ofs):
+        if not ofs:
+            return None
+        return [(t, bx+dx, by+dy) for t, dx, dy in ofs]
 
-def body():
-    return circle_layer("Body", C["body"], 0.0, -1.2, 1.15)
+    def rect_anim(x1, y1, x2, y2, ofs):
+        if not ofs:
+            return None, None
+        p1 = [(t, x1+dx, y1+dy) for t, dx, dy in ofs]
+        p2 = [(t, x2+dx, y2+dy) for t, dx, dy in ofs]
+        return p1, p2
 
-def spots():
-    s = [
-        circle_layer("Spot1", C["spot"], -0.6, -0.8, 0.22),
-        circle_layer("Spot2", C["spot"],  0.5, -1.1, 0.18),
-        circle_layer("Spot3", C["spot"],  0.1, -0.4, 0.15),
-        circle_layer("Spot4", C["spot"], -0.3, -1.6, 0.16),
-        circle_layer("Spot5", C["spot"],  0.6, -1.8, 0.13),
-        # neck spots
-        circle_layer("Spot6", C["spot"], -0.18, 0.35, 0.11),
-        circle_layer("Spot7", C["spot"],  0.20, 0.70, 0.10),
-    ]
-    return "".join(s)
+    layers = []
 
-def neck():
-    return region_layer("Neck", C["body"], [
-        (-0.38, -0.3), (0.38, -0.3),
-        (0.28, 1.55), (-0.28, 1.55),
-    ])
+    # ── background ──────────────────────────────────────────────────────────
+    layers.append(rect_xml("BG", BG, -4, -4, 4, 4))
 
-def ears(left_angle_anim=None, right_angle_anim=None):
-    left_ear = group_layer("Ear L",
-        [circle_layer("EarL outer", C["body"],    0, 0, 0.28),
-         circle_layer("EarL inner", C["ear_in"],  0, 0, 0.15)],
-        ox=-0.52, oy=2.58,
-        angle_anim=left_angle_anim)
-    right_ear = group_layer("Ear R",
-        [circle_layer("EarR outer", C["body"],    0, 0, 0.28),
-         circle_layer("EarR inner", C["ear_in"],  0, 0, 0.15)],
-        ox=0.52, oy=2.58,
-        angle_anim=right_angle_anim)
-    return left_ear + right_ear
+    # ── shadow ──────────────────────────────────────────────────────────────
+    layers.append(circle_xml("Shadow", SHADOW, 0, -3.60, 0.88, amount=0.35))
 
-def ossicones():
-    return (
-        rect_layer("OssiconeL", C["spot"], -0.44, 2.68, -0.32, 2.98) +
-        rect_layer("OssiconeR", C["spot"],  0.32, 2.68,  0.44, 2.98) +
-        circle_layer("OssiconeL tip", C["spot"], -0.38, 3.0, 0.1) +
-        circle_layer("OssiconeR tip", C["spot"],  0.38, 3.0, 0.1)
-    )
+    # ── stars ───────────────────────────────────────────────────────────────
+    if stars:
+        sc = [STAR_Y, STAR_O, STAR_Y, STAR_O, STAR_Y, STAR_O]
+        for i in range(6):
+            a = math.pi/6 + math.pi/3*i
+            sr = 1.22 + 0.22*(i % 2)
+            sx = sr * math.cos(a)
+            sy = sr * math.sin(a) - 0.30
+            grow = [("0s", 0.0), ("0.18s", 0.23), ("1.60s", 0.23), ("1.90s", 0.0)]
+            layers.append(circle_xml(f"Star{i}", sc[i], sx, sy, 0.0, rad_wps=grow))
 
-def head(y_anim=None):
-    y = 2.15
-    anim = y_anim  # list of (time, interp, x, y) tuples for head group offset
-    children = [
-        circle_layer("Head", C["body"], 0, 0, 0.72),
-        circle_layer("Cheek L", C["body"], -0.38, -0.22, 0.32),
-        circle_layer("Cheek R", C["body"],  0.38, -0.22, 0.32),
-        circle_layer("Muzzle", C["nose_tip"], 0, -0.42, 0.32),
-        circle_layer("Nostril L", C["spot"], -0.14, -0.45, 0.09),
-        circle_layer("Nostril R", C["spot"],  0.14, -0.45, 0.09),
-    ]
-    return group_layer("Head", children,
-                       offset_anim=anim if anim else None,
-                       ox=0, oy=y)
+    # ── legs (static) ───────────────────────────────────────────────────────
+    W = 0.27
+    for i, (cx, ytop, yleg, yhoof) in enumerate([
+        (-0.55, -1.52, -3.08, -3.42),
+        ( 0.06, -1.52, -3.08, -3.42),
+        (-0.80, -1.55, -2.98, -3.32),
+        ( 0.32, -1.55, -2.98, -3.32),
+    ]):
+        layers.append(rect_xml(f"Leg{i}",  BODY,   cx-W, ytop, cx+W, yleg))
+        layers.append(rect_xml(f"Hoof{i}", HOOVES, cx-W, yleg, cx+W, yhoof))
 
-def eyes(blink_anim_l=None, blink_anim_r=None,
-         pupil_y_anim_l=None, pupil_y_anim_r=None):
-    # Each eye: white + pupil + shine, grouped so we can scale for blink
-    def make_eye(side, ex, blink, pupil_ya):
-        white  = circle_layer(f"Eye{side} white",  C["eye_w"],  0,  0, 0.20)
-        pupil_y = 0
-        pupil = circle_layer(f"Eye{side} pupil", C["pupil"],
-                             0, pupil_y, 0.11,
-                             origin_anim=pupil_ya)
-        shine  = circle_layer(f"Eye{side} shine",  C["shine"],  0.06, 0.07, 0.05)
-        # scale y for blink
-        sc = blink  # list of (time, interp, val) for y-scale
-        # Hack: wrap in a group and use the scale.y via transformation
-        # We'll animate amount for a simpler blink
-        amount_layers = [white, pupil, shine]
-        if blink:
-            # Use a scale-y group
-            inner = "".join(amount_layers)
-            # Build scale animated as vec for transformation scale param
-            sc_waypoints = "".join(
-                f'<waypoint time="{t}" before="{ip}" after="{ip}">'
-                f'{vec(1, v)}</waypoint>'
-                for t, ip, v in blink
-            )
-            sc_anim = f'<animated type="vector">{sc_waypoints}</animated>'
-            return f"""
-<layer type="group" desc="Eye{side}">
-  {param("z_depth", real(0))}
-  {param("amount", real(1))}
-  {param("blend_method", integer(0))}
-  <param name="transformation">
-    <composite type="transformation">
-      <param name="offset">{vec(ex, 0)}</param>
-      <param name="angle">{real(0)}</param>
-      <param name="skew_angle">{real(0)}</param>
-      <param name="scale">{sc_anim}</param>
-    </composite>
-  </param>
-  <param name="canvas"><canvas>{inner}</canvas></param>
-  {param("time_dilation", real(1))}
-  {param("time_offset", real(0))}
-  {param("children_lock", boolean(False))}
-  {param("outline_grow", real(0))}
-</layer>"""
-        else:
-            return group_layer(f"Eye{side}", amount_layers, ox=ex, oy=0)
+    # ── body ────────────────────────────────────────────────────────────────
+    layers.append(circle_xml("Body", BODY, BX, BY, 1.18,
+                             orig_wps=orig(BX, BY, body_combined)))
 
-    return make_eye("L", -0.30, blink_anim_l, pupil_y_anim_l) + \
-           make_eye("R",  0.30, blink_anim_r, pupil_y_anim_r)
+    # ── neck (static) ───────────────────────────────────────────────────────
+    layers.append(rect_xml("Neck", BODY, -0.28, -0.25, 0.28, 1.50))
 
-def mouth_smile(open_anim=None):
-    """Simple smile using a region (arc approximated by polygon)."""
-    def arc_points(cx, cy, rx, ry, a_start, a_end, n=8, open_h=0):
-        pts = []
-        for i in range(n + 1):
-            a = a_start + (a_end - a_start) * i / n
-            pts.append((cx + rx * math.cos(a), cy + ry * math.sin(a) - open_h))
-        return pts
+    # ── body spots ──────────────────────────────────────────────────────────
+    for i, (sx, sy, sr) in enumerate([
+        (-0.56, -0.68, 0.23), (0.50, -1.00, 0.19),
+        ( 0.06, -0.32, 0.15), (-0.28, -1.55, 0.17),
+        ( 0.60, -1.70, 0.13),
+    ]):
+        layers.append(circle_xml(f"Spot{i}", SPOT, sx, sy, sr,
+                                orig_wps=orig(sx, sy, body_combined)))
 
-    # Static smile for now — animate with different region files per state
-    smile_pts = arc_points(0, -0.55, 0.22, 0.15, math.pi, 2 * math.pi)
-    # close it
-    smile_pts.append(smile_pts[0])
-    return region_layer("Mouth", C["mouth"], smile_pts)
+    # ── neck spots (static) ─────────────────────────────────────────────────
+    for i, (sx, sy, sr) in enumerate([(-0.16, 0.38, 0.10), (0.18, 0.72, 0.09)]):
+        layers.append(circle_xml(f"NeckSpot{i}", SPOT, sx, sy, sr))
 
-def mouth_open():
-    """Wider open mouth for talking."""
-    def arc_points(cx, cy, rx, ry, a_start, a_end, n=8):
-        pts = []
-        for i in range(n + 1):
-            a = a_start + (a_end - a_start) * i / n
-            pts.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
-        return pts
+    # ── ears ────────────────────────────────────────────────────────────────
+    for ename, ex, ey, e_ofs in [
+        ("EarL", -0.55, 2.65, ear_l_combined),
+        ("EarR",  0.55, 2.65, ear_r_combined),
+    ]:
+        ea = orig(ex, ey, e_ofs)
+        layers.append(circle_xml(f"{ename}Outer", BODY,   ex, ey, 0.27, orig_wps=ea))
+        layers.append(circle_xml(f"{ename}Inner", EAR_IN, ex, ey, 0.15, orig_wps=ea))
 
-    top = arc_points(0, -0.48, 0.24, 0.08, math.pi, 2*math.pi)
-    bot = arc_points(0, -0.56, 0.22, 0.16, 0, math.pi)
-    pts = top + bot[::-1]
-    return region_layer("MouthOpen", C["mouth"], pts)
+    # ── head ────────────────────────────────────────────────────────────────
+    def H(desc, color, rx, ry, r, rad_wps=None, amount=1.0):
+        ox, oy = HX+rx, HY+ry
+        return circle_xml(desc, color, ox, oy, r,
+                         orig_wps=orig(ox, oy, head_combined),
+                         rad_wps=rad_wps, amount=amount)
 
-def stars(n=5, t_appear="0s"):
-    """Burst of star circles for correct/celebrate."""
-    s = []
-    for i in range(n):
-        angle = 2 * math.pi * i / n
-        r = 1.0 + 0.3 * (i % 2)
-        x = r * math.cos(angle)
-        y = r * math.sin(angle) - 0.5
-        col = C["star"] if i % 2 == 0 else C["star2"]
-        s.append(circle_layer(f"Star{i}", col, x, y, 0.18,
-                              radius_anim=[
-                                  (t_appear, "linear", 0.0),
-                                  (f"{float(t_appear[:-1])+0.2:.1f}s", "linear", 0.22),
-                                  ("2s", "linear", 0.22),
-                              ]))
-    return "".join(s)
+    layers.append(H("Head",    BODY,  0.00,  0.00, 0.72))
+    layers.append(H("CheekL",  BODY, -0.40, -0.22, 0.30))
+    layers.append(H("CheekR",  BODY,  0.40, -0.22, 0.30))
+    layers.append(H("Muzzle",  NOSE,  0.00, -0.46, 0.32))
+    layers.append(H("NostrilL",SPOT, -0.13, -0.48, 0.08))
+    layers.append(H("NostrilR",SPOT,  0.13, -0.48, 0.08))
 
-# ── canvas wrapper ───────────────────────────────────────────────────────────
-def canvas(end_time, fps, layers):
-    inner = "".join(layers)
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<canvas version="1.2" width="480" height="480" fps="{fps}" begin-time="0" end-time="{end_time}" bgcolor="0 0 0 1">
-  <name>Jina the Giraffe</name>
-{inner}
-</canvas>"""
+    # mouth rect animated with head
+    MX1, MY1 = HX-0.17, HY-0.64
+    MX2, MY2 = HX+0.17, HY-0.56
+    mp1, mp2 = rect_anim(MX1, MY1, MX2, MY2, head_combined)
+    layers.append(rect_xml("Mouth", MOUTH, MX1, MY1, MX2, MY2,
+                           p1_wps=mp1, p2_wps=mp2))
 
-# ── full character stack (base, no anim params) ──────────────────────────────
-def giraffe_base(head_offset=None, body_offset=None,
-                 blink_l=None, blink_r=None,
-                 pupil_ya_l=None, pupil_ya_r=None,
-                 ear_la=None, ear_ra=None,
-                 use_open_mouth=False,
-                 show_stars=False):
+    # ── eyes (with optional blink) ───────────────────────────────────────────
+    pupil_blink = [(t, rv * 0.56) for t, rv in blink] if blink else None
+    for side, ex_rel in [("L", -0.28), ("R", 0.28)]:
+        layers.append(H(f"Eye{side}White", EYE_W, ex_rel,       0.18, 0.18, rad_wps=blink))
+        layers.append(H(f"Eye{side}Pupil", PUPIL, ex_rel+0.04,  0.18, 0.10, rad_wps=pupil_blink))
+        layers.append(H(f"Eye{side}Shine", SHINE, ex_rel+0.08,  0.24, 0.04))
 
-    head_children = [
-        circle_layer("Head", C["body"], 0, 0, 0.72),
-        circle_layer("Cheek L", C["body"], -0.38, -0.22, 0.32),
-        circle_layer("Cheek R", C["body"],  0.38, -0.22, 0.32),
-        circle_layer("Muzzle", C["nose_tip"], 0, -0.42, 0.32),
-        circle_layer("Nostril L", C["spot"], -0.14, -0.45, 0.09),
-        circle_layer("Nostril R", C["spot"],  0.14, -0.45, 0.09),
-        eyes(blink_l, blink_r, pupil_ya_l, pupil_ya_r),
-        mouth_open() if use_open_mouth else mouth_smile(),
-    ]
-    head_grp = group_layer("Head group", head_children,
-                            offset_anim=head_offset,
-                            ox=0, oy=2.15)
+    # ── ossicones ───────────────────────────────────────────────────────────
+    for side, ocx in [("L", -0.35), ("R", 0.35)]:
+        op1, op2 = rect_anim(
+            ocx-0.07, HY+0.55, ocx+0.07, HY+0.82,
+            head_combined)
+        layers.append(rect_xml(f"Ossicone{side}", SPOT,
+                               ocx-0.07, HY+0.55, ocx+0.07, HY+0.82,
+                               p1_wps=op1, p2_wps=op2))
+        tip_ox, tip_oy = HX+ocx, HY+0.88
+        layers.append(circle_xml(f"OssiconeTip{side}", SPOT,
+                                tip_ox, tip_oy, 0.10,
+                                orig_wps=orig(tip_ox, tip_oy, head_combined)))
 
-    body_children = [
-        bg_layer(),
-        shadow_layer(),
-        legs(),
-        neck(),
-        body(),
-        spots(),
-        ears(ear_la, ear_ra),
-        ossicones(),
-        head_grp,
-    ]
-    if show_stars:
-        body_children.insert(1, stars(6, "0s"))
-
-    if body_offset:
-        return group_layer("Giraffe", body_children,
-                           offset_anim=body_offset)
-    return "".join(body_children)
+    return canvas_xml(end_time, fps, layers)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Animation definitions
+# Clip definitions — all offset lists within a clip share the same time keys
 # ══════════════════════════════════════════════════════════════════════════════
 
 def make_idle():
-    """3s loop: gentle body bob + slow blink at 2.5s."""
-    body_bob = [
-        ("0s",   "linear", 0, 0),
-        ("0.75s","linear", 0, 0.07),
-        ("1.5s", "linear", 0, 0),
-        ("2.25s","linear", 0, -0.04),
-        ("3s",   "linear", 0, 0),
-    ]
-    blink = [
-        ("0s",    "linear", 1.0),
-        ("2.4s",  "linear", 1.0),
-        ("2.5s",  "linear", 0.05),
-        ("2.6s",  "linear", 1.0),
-        ("3s",    "linear", 1.0),
-    ]
-    return canvas("3s", 24, [giraffe_base(body_offset=body_bob,
-                                          blink_l=blink, blink_r=blink)])
+    T = ["0s", "0.75s", "1.5s", "2.25s", "3s"]
+    DY = [0.00, 0.12, 0.00, -0.06, 0.00]
+    body = [(T[i], 0.0, DY[i]) for i in range(5)]
+    blink = [("0s",0.18),("2.38s",0.18),("2.46s",0.007),("2.54s",0.18),("3s",0.18)]
+    # head_ofs=None → head follows body (merge adds zero extra)
+    return giraffe("3s", 24, body_ofs=body, blink=blink)
 
 def make_talking():
-    """2s loop: mouth alternates open/closed, ears wiggle."""
-    body_bob = [
-        ("0s",   "linear", 0, 0),
-        ("0.5s", "linear", 0, 0.04),
-        ("1s",   "linear", 0, 0),
-        ("1.5s", "linear", 0, 0.04),
-        ("2s",   "linear", 0, 0),
-    ]
-    ear_l = [
-        ("0s",   "linear", 5.0),
-        ("0.4s", "linear",-5.0),
-        ("0.8s", "linear", 5.0),
-        ("1.2s", "linear",-5.0),
-        ("1.6s", "linear", 5.0),
-        ("2s",   "linear", 5.0),
-    ]
-    ear_r = [
-        ("0s",   "linear",-5.0),
-        ("0.4s", "linear", 5.0),
-        ("0.8s", "linear",-5.0),
-        ("1.2s", "linear", 5.0),
-        ("1.6s", "linear",-5.0),
-        ("2s",   "linear",-5.0),
-    ]
-    # Alternate open/closed mouth via two versions — use open mouth throughout
-    # and animate the head up/down slightly (talking rhythm)
-    head_bob = [
-        ("0s",   "linear", 0, 0),
-        ("0.25s","linear", 0, 0.05),
-        ("0.5s", "linear", 0, 0),
-        ("0.75s","linear", 0, 0.05),
-        ("1s",   "linear", 0, 0),
-        ("1.25s","linear", 0, 0.05),
-        ("1.5s", "linear", 0, 0),
-        ("1.75s","linear", 0, 0.05),
-        ("2s",   "linear", 0, 0),
-    ]
-    return canvas("2s", 24, [giraffe_base(
-        body_offset=body_bob,
-        head_offset=head_bob,
-        ear_la=ear_l, ear_ra=ear_r,
-        use_open_mouth=True)])
+    T = ["0s","0.25s","0.5s","0.75s","1.0s","1.25s","1.5s","1.75s","2.0s"]
+    BDY = [0.00, 0.07, 0.00, 0.07, 0.00, 0.07, 0.00, 0.07, 0.00]
+    HDY = [0.00, 0.08, 0.00, 0.08, 0.00, 0.08, 0.00, 0.08, 0.00]
+    ELX = [0.00,-0.12, 0.00, 0.12, 0.00,-0.12, 0.00, 0.12, 0.00]
+    body  = [(T[i], 0.0, BDY[i]) for i in range(9)]
+    head  = [(T[i], 0.0, HDY[i]) for i in range(9)]
+    ear_l = [(T[i], ELX[i], 0.0) for i in range(9)]
+    ear_r = [(T[i], -ELX[i], 0.0) for i in range(9)]
+    return giraffe("2s", 24, body_ofs=body, head_ofs=head,
+                   ear_l_ofs=ear_l, ear_r_ofs=ear_r)
 
 def make_thinking():
-    """2s loop: pupils look up, tail-ear twitch, slight head tilt."""
-    pupil_up_l = [
-        ("0s",   "linear", 0, 0.0),
-        ("0.6s", "linear", 0, 0.06),
-        ("1.6s", "linear", 0, 0.06),
-        ("2s",   "linear", 0, 0.0),
-    ]
-    pupil_up_r = pupil_up_l[:]
-    ear_l = [
-        ("0s",  "linear", 0),
-        ("0.5s","linear",-8),
-        ("1s",  "linear", 0),
-        ("1.5s","linear",-8),
-        ("2s",  "linear", 0),
-    ]
-    head_tilt = [
-        ("0s",   "linear", 0,  0),
-        ("0.8s", "linear", 0.1,0.05),
-        ("1.6s", "linear", 0,  0),
-        ("2s",   "linear", 0,  0),
-    ]
-    return canvas("2s", 24, [giraffe_base(
-        head_offset=head_tilt,
-        pupil_ya_l=pupil_up_l,
-        pupil_ya_r=pupil_up_r,
-        ear_la=ear_l)])
+    T = ["0s","0.5s","1.0s","1.5s","2.0s"]
+    BDY = [0.00, 0.04, 0.00, 0.04, 0.00]
+    HDX = [0.00, 0.14, 0.00,-0.10, 0.00]
+    ELX = [0.00,-0.10, 0.00, 0.08, 0.00]
+    body  = [(T[i], 0.0,    BDY[i]) for i in range(5)]
+    head  = [(T[i], HDX[i], 0.0)   for i in range(5)]
+    ear_l = [(T[i], ELX[i], 0.0)   for i in range(5)]
+    return giraffe("2s", 24, body_ofs=body, head_ofs=head, ear_l_ofs=ear_l)
 
 def make_correct():
-    """2s one-shot: jump up + stars appear."""
-    body_jump = [
-        ("0s",   "linear", 0, 0),
-        ("0.3s", "linear", 0, 0.6),
-        ("0.7s", "linear", 0, 0),
-        ("0.9s", "linear", 0, 0.25),
-        ("1.1s", "linear", 0, 0),
-        ("2s",   "linear", 0, 0),
-    ]
-    blink_happy = [
-        ("0s",  "linear", 1.0),
-        ("0.1s","linear", 0.08),
-        ("0.2s","linear", 1.0),
-        ("2s",  "linear", 1.0),
-    ]
-    return canvas("2s", 24, [giraffe_base(
-        body_offset=body_jump,
-        blink_l=blink_happy, blink_r=blink_happy,
-        show_stars=True)])
+    T = ["0s","0.28s","0.55s","0.80s","1.05s","2.0s"]
+    BDY = [0.00, 0.38, -0.08, 0.18, 0.00, 0.00]
+    body  = [(T[i], 0.0, BDY[i]) for i in range(6)]
+    blink = [("0s",0.18),("0.10s",0.007),("0.22s",0.18),("2.0s",0.18)]
+    return giraffe("2s", 24, body_ofs=body, blink=blink, stars=True)
 
 def make_wrong():
-    """2s one-shot: gentle head shake."""
-    head_shake = [
-        ("0s",   "linear",  0,   0),
-        ("0.2s", "linear", -0.3, 0),
-        ("0.5s", "linear",  0.3, 0),
-        ("0.8s", "linear", -0.2, 0),
-        ("1.1s", "linear",  0.1, 0),
-        ("1.4s", "linear",  0,   0),
-        ("2s",   "linear",  0,   0),
-    ]
-    blink_sad = [
-        ("0s",  "linear", 1.0),
-        ("0.15s","linear",0.08),
-        ("0.3s","linear", 1.0),
-        ("1.8s","linear", 1.0),
-        ("1.9s","linear", 0.08),
-        ("2s",  "linear", 1.0),
-    ]
-    return canvas("2s", 24, [giraffe_base(
-        head_offset=head_shake,
-        blink_l=blink_sad, blink_r=blink_sad)])
+    T = ["0s","0.20s","0.45s","0.70s","1.00s","1.30s","2.0s"]
+    HDX = [0.00,-0.34, 0.30,-0.22, 0.10, 0.00, 0.00]
+    body  = [(t, 0.0, 0.0) for t in T]
+    head  = [(T[i], HDX[i], 0.0) for i in range(7)]
+    blink = [("0s",0.18),("0.12s",0.007),("0.24s",0.18),("2.0s",0.18)]
+    return giraffe("2s", 24, body_ofs=body, head_ofs=head, blink=blink)
 
 def make_celebrate():
-    """3s one-shot: big jump, bounce, stars."""
-    body_cel = [
-        ("0s",   "linear", 0,  0),
-        ("0.4s", "linear", 0,  0.9),
-        ("0.8s", "linear", 0, -0.1),
-        ("1.1s", "linear", 0,  0.4),
-        ("1.4s", "linear", 0,  0),
-        ("1.7s", "linear", 0,  0.15),
-        ("2.0s", "linear", 0,  0),
-        ("3s",   "linear", 0,  0),
-    ]
-    blink_cel = [
-        ("0s",  "linear", 1.0),
-        ("0.05s","linear",0.05),
-        ("0.15s","linear",1.0),
-        ("0.9s","linear", 1.0),
-        ("0.95s","linear",0.05),
-        ("1.05s","linear",1.0),
-        ("3s",  "linear", 1.0),
-    ]
-    ear_party_l = [
-        ("0s",   "linear",  0),
-        ("0.2s", "linear",-20),
-        ("0.5s", "linear", 15),
-        ("0.8s", "linear",-10),
-        ("1.2s", "linear",  5),
-        ("1.5s", "linear",  0),
-        ("3s",   "linear",  0),
-    ]
-    ear_party_r = [(t, i, -v) for t, i, v in ear_party_l]
-    return canvas("3s", 24, [giraffe_base(
-        body_offset=body_cel,
-        blink_l=blink_cel, blink_r=blink_cel,
-        ear_la=ear_party_l, ear_ra=ear_party_r,
-        show_stars=True)])
+    T = ["0s","0.30s","0.60s","0.90s","1.20s","1.50s","1.80s","2.10s","3.0s"]
+    BDX = [0.00, 0.20,-0.20, 0.15,-0.15, 0.08,-0.08, 0.00, 0.00]
+    BDY = [0.00, 0.12, 0.12, 0.08, 0.08, 0.04, 0.04, 0.00, 0.00]
+    ELX = [0.00,-0.14, 0.12,-0.10, 0.08,-0.06, 0.04, 0.00, 0.00]
+    body  = [(T[i], BDX[i], BDY[i]) for i in range(9)]
+    ear_l = [(T[i], ELX[i], 0.0)   for i in range(9)]
+    ear_r = [(T[i], -ELX[i], 0.0)  for i in range(9)]
+    blink = [("0s",0.18),("0.08s",0.007),("0.20s",0.18),
+             ("1.05s",0.18),("1.12s",0.007),("1.22s",0.18),("3.0s",0.18)]
+    return giraffe("3s", 24, body_ofs=body,
+                   ear_l_ofs=ear_l, ear_r_ofs=ear_r, blink=blink, stars=True)
 
-# ── write all files ──────────────────────────────────────────────────────────
-animations = {
+# ── write ─────────────────────────────────────────────────────────────────────
+clips = {
     "idle":      make_idle,
     "talking":   make_talking,
     "thinking":  make_thinking,
@@ -549,11 +332,11 @@ animations = {
     "celebrate": make_celebrate,
 }
 
-for name, fn in animations.items():
+for name, fn in clips.items():
     path = os.path.join(OUT, f"{name}.sif")
-    xml = fn()
+    content = fn()
     with open(path, "w", encoding="utf-8") as f:
-        f.write(xml)
-    print(f"  wrote {path}")
+        f.write(content)
+    print(f"  wrote {path}  ({len(content)//1024} KB)")
 
-print(f"\nAll {len(animations)} SIF files written to {OUT}/")
+print(f"\nAll {len(clips)} SIF files written to {OUT}/")
