@@ -40,8 +40,8 @@ jobs:
 
             echo "--- Restarting PM2 processes ---"
             pm2 restart learn || pm2 start npm --name learn -- start
-            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "0 2 * * *"
-            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "0 3 * * *"
+            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "0 2 * * *" --no-autorestart
+            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "0 3 * * *" --no-autorestart
             pm2 save
 
             echo "=== Deploy complete ==="
