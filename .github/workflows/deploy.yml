@@ -27,13 +27,13 @@ jobs:
             git pull origin main
 
             echo "--- Installing dependencies ---"
-            npm ci --omit=dev
+            npm install --omit=dev
 
             echo "--- Generating Prisma client ---"
             npx prisma generate
 
             echo "--- Running database migrations ---"
-            npx prisma migrate deploy
+            npx prisma db push
 
             echo "--- Building Next.js app ---"
             npm run build
