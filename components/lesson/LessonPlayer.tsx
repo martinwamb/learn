@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AudioGuidedPlayer from "@/components/lesson/AudioGuidedPlayer";
 
 interface ContentBlock {
   type: "introduction" | "explanation" | "activity";
@@ -36,6 +37,7 @@ interface LessonPlayerProps {
 
 export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonPlayerProps) {
   const router = useRouter();
+  const [audioMode, setAudioMode] = useState(gradeCode === "PP1" || gradeCode === "PP2");
   const [step, setStep] = useState<"content" | "activities" | "done">("content");
   const [actIdx, setActIdx] = useState(0);
   const [selected, setSelected] = useState<string>("");
@@ -44,6 +46,12 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  if (audioMode) {
+    return (
+      <AudioGuidedPlayer lesson={lesson} gradeCode={gradeCode} subjectSlug={subjectSlug} />
+    );
+  }
 
   const activities = lesson.activities as Activity[];
   const currentActivity = activities[actIdx];
@@ -132,12 +140,21 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
           </div>
         )}
 
-        <button
-          onClick={() => setStep("activities")}
-          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl text-lg transition-colors"
-        >
-          Start Activities 🎯
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setStep("activities")}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl text-lg transition-colors"
+          >
+            Start Activities 🎯
+          </button>
+          <button
+            onClick={() => setAudioMode(true)}
+            title="Switch to audio-guided mode"
+            className="px-4 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-2xl text-sm transition-colors"
+          >
+            🔊 Listen
+          </button>
+        </div>
       </div>
     );
   }
