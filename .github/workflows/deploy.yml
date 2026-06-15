@@ -1,0 +1,47 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "=== Deploying learn.wambugumartin.com ==="
+            cd /var/www/learn
+
+            git pull origin main
+
+            echo "--- Installing dependencies ---"
+            npm ci --omit=dev
+
+            echo "--- Generating Prisma client ---"
+            npx prisma generate
+
+            echo "--- Running database migrations ---"
+            npx prisma migrate deploy
+
+            echo "--- Building Next.js app ---"
+            npm run build
+
+            echo "--- Restarting PM2 processes ---"
+            pm2 restart learn || pm2 start npm --name learn -- start
+            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "0 2 * * *"
+            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "0 3 * * *"
+            pm2 save
+
+            echo "=== Deploy complete ==="
