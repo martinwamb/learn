@@ -74,7 +74,8 @@ export function useLessonNarrator(lesson: LessonData) {
 
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
-  const recogRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recogRef = useRef<any>(null);
   const cancelledRef = useRef(false);
 
   // initialise on mount
@@ -287,20 +288,19 @@ export function useLessonNarrator(lesson: LessonData) {
 
   const startListening = useCallback(
     (currentOptions: string[]) => {
-      const SR =
-        (typeof window !== "undefined" &&
-          (window.SpeechRecognition ||
-            (window as unknown as { webkitSpeechRecognition: typeof SpeechRecognition })
-              .webkitSpeechRecognition)) ||
-        null;
+      if (typeof window === "undefined") return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SR) return;
 
-      const recog = new SR();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const recog = new SR() as any;
       recog.lang = "en-US";
       recog.interimResults = false;
       recog.maxAlternatives = 3;
 
-      recog.onresult = (e: SpeechRecognitionEvent) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recog.onresult = (e: any) => {
         const transcript = e.results[0][0].transcript.toLowerCase();
         const match = currentOptions.find((opt) =>
           transcript.includes(opt.toLowerCase().split(" ")[0])
