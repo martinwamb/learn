@@ -11,7 +11,7 @@ import { createScriptDb } from "../lib/db-script";
 
 const db = createScriptDb();
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:14b";
 const MAX_LESSONS_PER_UNIT = Number(process.env.LESSON_GEN_MAX_PER_UNIT ?? 5);
 
 interface GeneratedLesson {
@@ -30,6 +30,7 @@ async function callOllama(prompt: string): Promise<string> {
       model: OLLAMA_MODEL,
       prompt,
       stream: false,
+      think: false,
       options: { temperature: 0.7, num_predict: 700 },
     }),
   });
