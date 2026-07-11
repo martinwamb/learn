@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# generated at runtime on the server
+/public/audio/tts-cache/

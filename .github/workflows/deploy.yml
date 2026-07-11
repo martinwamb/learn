@@ -35,13 +35,21 @@ jobs:
             echo "--- Running database migrations ---"
             npx prisma db push
 
+            echo "--- Seeding curriculum (idempotent upserts) ---"
+            npm run seed
+
             echo "--- Building Next.js app ---"
             npm run build
 
             echo "--- Restarting PM2 processes ---"
-            pm2 restart learn || pm2 start npm --name learn -- start
-            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "0 2 * * *" --no-autorestart
-            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "0 3 * * *" --no-autorestart
+            # -p 3006 is required here (not just in nginx/.env) because `next start` binds
+            # its HTTP server before .env is parsed -- PORT cannot be set via .env alone.
+            pm2 restart learn || pm2 start npm --name learn -- start -- -p 3006
+            # 23:15 / 04:30 UTC (not 02:00 / 03:00) to avoid colliding with port's and
+            # publisher-site's own nightly cron jobs at those exact minutes -- both were found
+            # racing for CPU with the learn workers at identical times.
+            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "15 23 * * *" --no-autorestart
+            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
             pm2 save
 
             echo "=== Deploy complete ==="

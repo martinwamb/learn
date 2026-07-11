@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLessonNarrator } from "@/hooks/useLessonNarrator";
 import type { Activity } from "@/hooks/useLessonNarrator";
@@ -43,6 +43,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   const [finalScore, setFinalScore] = useState(0);
   const [selectedOpt, setSelectedOpt] = useState<string | null>(null);
   const [matchMap, setMatchMap] = useState<Record<string, string>>({});
+  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [fillValue, setFillValue] = useState("");
   const [muted, setMuted] = useState(false);
 
@@ -172,16 +173,62 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
     setMatchMap({});
   }, [narrator, matchMap]);
 
+  // Tap-to-connect matching: tap a left item, then tap its right pair (no native
+  // HTML5 drag-and-drop, which behaves poorly on touchscreens). Tapping an
+  // already-connected left disconnects it, freeing its right item back up.
+  const handleLeftTap = useCallback(
+    (left: string) => {
+      if (narrator.feedback) return;
+      if (matchMap[left] != null) {
+        setMatchMap((m) => {
+          const next = { ...m };
+          delete next[left];
+          return next;
+        });
+        setSelectedLeft(null);
+        return;
+      }
+      setSelectedLeft((cur) => (cur === left ? null : left));
+    },
+    [narrator.feedback, matchMap]
+  );
+
+  const handleRightTap = useCallback(
+    (right: string) => {
+      if (narrator.feedback || !selectedLeft) return;
+      setMatchMap((m) => ({ ...m, [selectedLeft]: right }));
+      setSelectedLeft(null);
+    },
+    [narrator.feedback, selectedLeft]
+  );
+
   // Reset selection state when activity changes
   useEffect(() => {
     setSelectedOpt(null);
     setFillValue("");
     setMatchMap({});
+    setSelectedLeft(null);
   }, [narrator.actIdx]);
 
   const currentAct = narrator.currentActivity as Activity | null;
   const isWaiting = narrator.phase === "waiting-answer";
   const isAsking = narrator.phase === "asking" || isWaiting;
+
+  // Shuffle the right column so its position never trivially lines up with the left
+  // column -- pairs[] arrives from the generator already correctly matched in order,
+  // so an unshuffled display would let a child "match" by row position alone.
+  // Deterministic (seeded) shuffle, not Math.random(): render/useMemo must stay pure.
+  const shuffledRights = useMemo(() => {
+    if (!currentAct || currentAct.type !== "matching") return [];
+    const arr = (currentAct.pairs ?? []).map((p) => p.right);
+    let seed = narrator.actIdx * 2654435761 + arr.length + 1;
+    for (let i = arr.length - 1; i > 0; i--) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      const j = seed % (i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [currentAct, narrator.actIdx]);
 
   // ── Completion screen ─────────────────────────────────────────────────────
   if (narrator.phase === "complete") {
@@ -364,37 +411,55 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
             </div>
           )}
 
-          {/* matching */}
+          {/* matching — tap a left item, then tap its right pair to connect them */}
           {currentAct.type === "matching" && (
             <div className="space-y-3">
+              <p className="text-center text-sm text-gray-400">
+                {selectedLeft ? "Now tap its match →" : "Tap an item to start matching"}
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  {(currentAct.pairs ?? []).map((p) => (
-                    <div
-                      key={p.left}
-                      className="h-12 bg-blue-100 rounded-xl flex items-center justify-center font-semibold text-blue-800"
-                    >
-                      {p.left}
-                    </div>
-                  ))}
+                  {(currentAct.pairs ?? []).map((p) => {
+                    const isMatched = matchMap[p.left] != null;
+                    const isSelected = selectedLeft === p.left;
+                    return (
+                      <button
+                        key={p.left}
+                        disabled={!!narrator.feedback}
+                        onClick={() => handleLeftTap(p.left)}
+                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-sm border-2 transition-all ${
+                          isMatched
+                            ? "bg-green-100 border-green-400 text-green-900"
+                            : isSelected
+                            ? "bg-orange-100 border-orange-400 text-orange-900 scale-105"
+                            : "bg-blue-100 border-blue-200 text-blue-800 hover:bg-blue-200"
+                        }`}
+                      >
+                        {p.left}
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="space-y-2">
-                  {(currentAct.pairs ?? []).map((p) => (
-                    <select
-                      key={p.right}
-                      value={matchMap[p.left] ?? ""}
-                      onChange={(e) =>
-                        setMatchMap((m) => ({ ...m, [p.left]: e.target.value }))
-                      }
-                      disabled={!!narrator.feedback}
-                      className="w-full h-12 border-2 border-gray-200 rounded-xl px-2 text-sm focus:border-orange-400 focus:outline-none"
-                    >
-                      <option value="">Pick...</option>
-                      {(currentAct.pairs ?? []).map((pp) => (
-                        <option key={pp.right} value={pp.right}>{pp.right}</option>
-                      ))}
-                    </select>
-                  ))}
+                  {shuffledRights.map((right) => {
+                    const isTaken = Object.values(matchMap).includes(right);
+                    return (
+                      <button
+                        key={right}
+                        disabled={!!narrator.feedback || isTaken || !selectedLeft}
+                        onClick={() => handleRightTap(right)}
+                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-sm border-2 transition-all ${
+                          isTaken
+                            ? "bg-green-100 border-green-400 text-green-900"
+                            : selectedLeft
+                            ? "bg-yellow-100 border-yellow-400 text-yellow-900 hover:bg-yellow-200"
+                            : "bg-gray-100 border-gray-200 text-gray-500"
+                        }`}
+                      >
+                        {right}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               {!narrator.feedback && (

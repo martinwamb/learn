@@ -72,61 +72,51 @@ export function useLessonNarrator(lesson: LessonData) {
     feedback: null,
   });
 
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recogRef = useRef<any>(null);
   const cancelledRef = useRef(false);
 
-  // initialise on mount
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    synthRef.current = window.speechSynthesis;
-
-    const pickVoice = () => {
-      const voices = synthRef.current!.getVoices();
-      const enVoices = voices.filter((v) => v.lang.startsWith("en"));
-      // prefer a female-sounding voice
-      const female = enVoices.find(
-        (v) =>
-          v.name.toLowerCase().includes("female") ||
-          v.name.toLowerCase().includes("woman") ||
-          v.name.toLowerCase().includes("zira") ||
-          v.name.toLowerCase().includes("samantha") ||
-          v.name.toLowerCase().includes("victoria") ||
-          v.name.toLowerCase().includes("karen")
-      );
-      voiceRef.current = female ?? enVoices[1] ?? enVoices[0] ?? voices[0] ?? null;
-    };
-
-    pickVoice();
-    synthRef.current.onvoiceschanged = pickVoice;
-
     return () => {
       cancelledRef.current = true;
-      synthRef.current?.cancel();
+      audioRef.current?.pause();
       recogRef.current?.abort();
     };
   }, []);
 
+  // Narration audio is generated server-side (edge-tts, Kenyan neural voice) and
+  // served from a content-addressed cache -- see app/api/tts/speak/route.ts. Replaces
+  // the old browser speechSynthesis approach, whose voice quality depended entirely on
+  // whatever the visitor's OS/browser happened to expose.
   const speak = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
       if (cancelledRef.current) { resolve(); return; }
-      const synth = synthRef.current;
-      if (!synth) { resolve(); return; }
-      synth.cancel();
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.voice = voiceRef.current;
-      utt.rate = 0.88;
-      utt.pitch = 1.1;
-      utt.volume = 1.0;
-      // Safety net: speechSynthesis.onend sometimes silently never fires (Chrome/Safari bug).
-      // Estimate reading time at ~65ms/char (rate=0.88 ≈ 150 wpm), min 1.5s, max 30s.
+      audioRef.current?.pause();
+
+      // Safety net: media events can occasionally fail to fire (mirrors the old
+      // speechSynthesis.onend bug). Estimate reading time at ~65ms/char, min 1.5s, max 30s.
       const ms = Math.min(Math.max(text.length * 65, 1500), 30_000);
       const t = setTimeout(() => resolve(), ms);
-      utt.onend = () => { clearTimeout(t); resolve(); };
-      utt.onerror = () => { clearTimeout(t); resolve(); };
-      synth.speak(utt);
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(t);
+        resolve();
+      };
+
+      fetch(`/api/tts/speak?text=${encodeURIComponent(text)}`)
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`TTS HTTP ${res.status}`))))
+        .then(({ url }: { url: string }) => {
+          if (cancelledRef.current) { finish(); return; }
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          audio.onended = finish;
+          audio.onerror = finish;
+          audio.play().catch(finish);
+        })
+        .catch(() => finish());
     });
   }, []);
 
@@ -286,7 +276,7 @@ export function useLessonNarrator(lesson: LessonData) {
 
   const stop = useCallback(() => {
     cancelledRef.current = true;
-    synthRef.current?.cancel();
+    audioRef.current?.pause();
     recogRef.current?.abort();
     setState((s) => ({ ...s, phase: "idle", isListening: false }));
   }, []);

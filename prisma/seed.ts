@@ -52,7 +52,7 @@ const subjectsByGrade: Record<string, { name: string; slug: string; icon: string
 };
 
 // Sample units and lessons per grade/subject (AI worker will expand these nightly)
-const seedUnits: Record<string, { sequence: number; title: string; outcomes: string[]; lessons: SeedLesson[] }[]> = {
+const seedUnits: Record<string, { sequence: number; title: string; outcomes: string[]; targetLessonCount?: number; lessons: SeedLesson[] }[]> = {
   // ── Grade 1 English ────────────────────────────────────────────────────────
   "G1-english": [
     {
@@ -63,6 +63,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Recite nursery rhymes and songs",
         "Describe people, animals and objects using simple sentences",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -104,6 +105,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Recognise the sounds letters make",
         "Read simple CVC words (cat, dog, sun)",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -133,6 +135,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Write numerals 1 to 10",
         "Order numbers from smallest to largest",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -175,6 +178,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Understand the + and = symbols",
         "Solve simple word problems involving addition",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -204,6 +208,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Respond to greetings correctly",
         "Introduce themselves in Kiswahili",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -233,6 +238,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Describe roles of family members",
         "Show respect for family members",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -262,6 +268,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Distinguish between loud and soft sounds",
         "Link sounds to the objects that make them",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -290,6 +297,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
         "Match objects that are the same",
         "Describe objects using words like big, small, same, different",
       ],
+      targetLessonCount: 15,
       lessons: [
         {
           sequence: 1,
@@ -304,6 +312,492 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
             { type: "multiple_choice", question: "Which shape is different? ○ ○ ○ □", options: ["First ○", "Second ○", "Third ○", "The □"], answer: "The □" },
           ],
           funFact: "Sorting is one of the earliest math skills humans ever developed — ancient people sorted shells and stones!",
+        },
+      ],
+    },
+  ],
+  // ── PP2 Language ──────────────────────────────────────────────────────────
+  "PP2-language": [
+    {
+      sequence: 1,
+      title: "Rhyming Words",
+      outcomes: [
+        "Identify words that rhyme",
+        "Produce simple rhyming pairs",
+        "Enjoy rhymes through songs and play",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Words That Sound Alike",
+          objective: "By the end of this lesson, the learner should be able to identify pairs of rhyming words.",
+          content: [
+            { type: "introduction", text: "Some words are best friends — they end with the same sound! Let's find them." },
+            { type: "explanation", text: "Rhyming words end with the same sound, even if they start differently.", example: "Cat and hat rhyme. Sun and fun rhyme too!" },
+            { type: "activity", instruction: "Say each pair out loud and clap if they rhyme:", items: ["Cat — Hat", "Dog — Log", "Ball — Spoon", "Sun — Fun"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Which word rhymes with 'cat'?", options: ["Dog", "Hat", "Sun", "Cup"], answer: "Hat" },
+            { type: "matching", pairs: [{ left: "Cat", right: "Hat" }, { left: "Dog", right: "Log" }, { left: "Sun", right: "Fun" }] },
+          ],
+          funFact: "Many favourite children's songs are built entirely from rhyming words!",
+        },
+      ],
+    },
+  ],
+  // ── PP2 Mathematics ───────────────────────────────────────────────────────
+  "PP2-mathematics": [
+    {
+      sequence: 1,
+      title: "Numbers 1 to 5",
+      outcomes: [
+        "Count objects up to 5",
+        "Recognise numerals 1 to 5",
+        "Match a numeral to the correct quantity",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Counting My Fingers",
+          objective: "By the end of this lesson, the learner should be able to count and recognise numbers 1 to 5.",
+          content: [
+            { type: "introduction", text: "Hold up one hand. Did you know it can help you count to 5?" },
+            { type: "explanation", text: "Each finger stands for one number. Count them one at a time.", example: "Thumb is 1, next finger is 2, middle finger is 3, next is 4, smallest finger is 5!" },
+            { type: "activity", instruction: "Count the pictures and say the number:", items: ["🍌 → ?", "🍌🍌🍌 → ?", "🍌🍌🍌🍌🍌 → ?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "How many bananas: 🍌🍌🍌?", options: ["2", "3", "4", "5"], answer: "3" },
+            { type: "matching", pairs: [{ left: "1", right: "one" }, { left: "3", right: "three" }, { left: "5", right: "five" }] },
+          ],
+          funFact: "Humans learned to count using their fingers thousands of years ago!",
+        },
+      ],
+    },
+  ],
+  // ── PP2 Environmental Activities ──────────────────────────────────────────
+  "PP2-environment": [
+    {
+      sequence: 1,
+      title: "My Home and School",
+      outcomes: [
+        "Name people found at home and school",
+        "Describe the roles of people who help us",
+        "Show care for the home and school environment",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "People Who Help Me",
+          objective: "By the end of this lesson, the learner should be able to name people who help them at home and school.",
+          content: [
+            { type: "introduction", text: "Many people help us every day! Let's think about who helps us at home and at school." },
+            { type: "explanation", text: "At home, our parents and family help us. At school, our teacher and the cook help us.", example: "Mama cooks food at home. Teacher helps us learn at school." },
+            { type: "activity", instruction: "Name someone who helps you and say how:", items: ["Who cooks for you?", "Who teaches you?", "Who keeps you safe?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Who helps us learn at school?", options: ["The cook", "The teacher", "The driver", "The doctor"], answer: "The teacher" },
+          ],
+          funFact: "A school has many helpers you might not see every day — like the people who keep it clean and safe!",
+        },
+      ],
+    },
+  ],
+  // ── PP2 Creative Activities ───────────────────────────────────────────────
+  "PP2-creative": [
+    {
+      sequence: 1,
+      title: "Colours and Shapes",
+      outcomes: [
+        "Name primary colours",
+        "Identify basic shapes",
+        "Create simple drawings using shapes and colours",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "My Favourite Colours",
+          objective: "By the end of this lesson, the learner should be able to name and identify primary colours.",
+          content: [
+            { type: "introduction", text: "Look around you — colours are everywhere! Red, blue, yellow, and so many more." },
+            { type: "explanation", text: "Red, blue, and yellow are called primary colours. We can mix them to make new colours!", example: "Blue and yellow mixed together make green." },
+            { type: "activity", instruction: "Point to something in this colour:", items: ["Something red 🔴", "Something blue 🔵", "Something yellow 🟡"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Which two colours mix to make green?", options: ["Red and blue", "Blue and yellow", "Red and yellow", "Blue and white"], answer: "Blue and yellow" },
+          ],
+          funFact: "Rainbows always show their colours in the very same order!",
+        },
+      ],
+    },
+  ],
+  // ── PP2 Religious Education ───────────────────────────────────────────────
+  "PP2-religious-education": [
+    {
+      sequence: 1,
+      title: "Being Kind to Others",
+      outcomes: [
+        "Explain what it means to be kind",
+        "Give examples of kind actions",
+        "Practise kindness towards classmates",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "A Kind Heart",
+          objective: "By the end of this lesson, the learner should be able to describe simple ways to be kind to others.",
+          content: [
+            { type: "introduction", text: "Being kind makes everyone feel happy — including you!" },
+            { type: "explanation", text: "Kindness means helping and caring for others without expecting anything back.", example: "Sharing your pencil with a friend who has none is a kind act." },
+            { type: "activity", instruction: "Think of one kind thing you can do today:", items: ["Share something", "Say a kind word", "Help a friend"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Which of these is a kind action?", options: ["Sharing your snack", "Ignoring a friend", "Taking without asking", "Shouting"], answer: "Sharing your snack" },
+          ],
+          funFact: "Scientists have found that being kind can make the person doing it feel happier too!",
+        },
+      ],
+    },
+  ],
+  // ── G2 English ─────────────────────────────────────────────────────────────
+  "G2-english": [
+    {
+      sequence: 1,
+      title: "Reading Short Stories",
+      outcomes: [
+        "Read a short story with understanding",
+        "Answer simple comprehension questions",
+        "Retell a story in their own words",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "The Thirsty Crow",
+          objective: "By the end of this lesson, the learner should be able to read a short story and answer questions about it.",
+          content: [
+            { type: "introduction", text: "Today we read about a clever crow who solved a big problem!" },
+            { type: "explanation", text: "A crow was very thirsty. It found a jug with a little water at the bottom, too low to reach. The crow dropped pebbles into the jug one by one until the water rose high enough to drink.", example: "The crow used its brain, not just its beak, to solve the problem." },
+            { type: "activity", instruction: "Answer these questions about the story:", items: ["Why was the crow thirsty?", "What problem did the crow have?", "How did the crow solve it?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "How did the crow reach the water?", options: ["It tipped the jug over", "It dropped in pebbles", "It flew away", "It broke the jug"], answer: "It dropped in pebbles" },
+            { type: "fill_blank", sentence: "The crow used ___ to raise the water level.", answer: "pebbles" },
+          ],
+          funFact: "This story has been told for over 2,000 years — it comes from Aesop's Fables!",
+        },
+      ],
+    },
+  ],
+  // ── G2 Kiswahili ───────────────────────────────────────────────────────────
+  "G2-kiswahili": [
+    {
+      sequence: 1,
+      title: "Siku za Wiki (Days of the Week)",
+      outcomes: [
+        "Taja siku saba za wiki",
+        "Tumia siku za wiki katika sentensi",
+        "Panga siku za wiki kwa mpangilio",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Wiki Ina Siku Saba",
+          objective: "By the end of this lesson, the learner should be able to name the seven days of the week in Kiswahili in order.",
+          content: [
+            { type: "introduction", text: "Wiki moja ina siku saba. Leo tutajifunza majina yake yote!" },
+            { type: "explanation", text: "Siku za wiki ni: Jumatatu, Jumanne, Jumatano, Alhamisi, Ijumaa, Jumamosi, na Jumapili.", example: "Shuleni tunaenda Jumatatu mpaka Ijumaa. Tunapumzika Jumamosi na Jumapili." },
+            { type: "activity", instruction: "Sema siku hizi kwa mpangilio:", items: ["Jumatatu", "Jumanne", "Jumatano", "Alhamisi", "Ijumaa", "Jumamosi", "Jumapili"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Siku ya kwanza ya wiki ni ipi?", options: ["Jumapili", "Jumatatu", "Ijumaa", "Jumamosi"], answer: "Jumatatu" },
+            { type: "fill_blank", sentence: "Baada ya Jumatano huja ___.", answer: "Alhamisi" },
+          ],
+          funFact: "Kiswahili week names borrow from Arabic — 'Ijumaa' relates to the word for gathering, like Friday prayers!",
+        },
+      ],
+    },
+  ],
+  // ── G2 Mathematics ─────────────────────────────────────────────────────────
+  "G2-mathematics": [
+    {
+      sequence: 1,
+      title: "Addition and Subtraction Within 20",
+      outcomes: [
+        "Add two numbers with a sum up to 20",
+        "Subtract numbers within 20",
+        "Solve simple word problems",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Adding Past 10",
+          objective: "By the end of this lesson, the learner should be able to add two numbers with a total up to 20.",
+          content: [
+            { type: "introduction", text: "We already know numbers to 10. Now let's go further and add all the way to 20!" },
+            { type: "explanation", text: "When numbers add up to more than 10, we count on carefully, one step at a time.", example: "8 + 5: start at 8, count on 5 more — 9, 10, 11, 12, 13. So 8 + 5 = 13." },
+            { type: "activity", instruction: "Solve these by counting on:", items: ["9 + 4 = ?", "7 + 8 = ?", "12 + 6 = ?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What is 9 + 6?", options: ["14", "15", "16", "17"], answer: "15" },
+            { type: "fill_blank", sentence: "12 + 5 = ___.", answer: "17" },
+          ],
+          funFact: "The '=' sign was invented by a Welsh mathematician who was tired of writing 'is equal to' over and over!",
+        },
+      ],
+    },
+  ],
+  // ── G2 Environmental & Social Studies ─────────────────────────────────────
+  "G2-ess": [
+    {
+      sequence: 1,
+      title: "My Community and Neighbourhood",
+      outcomes: [
+        "Identify people and places in the local community",
+        "Describe the role of community helpers",
+        "Show respect for community members",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Helpers in My Community",
+          objective: "By the end of this lesson, the learner should be able to name community helpers and describe their work.",
+          content: [
+            { type: "introduction", text: "Beyond our family, many people in our community help us too!" },
+            { type: "explanation", text: "A community has helpers like doctors, police officers, and shopkeepers who each play an important role.", example: "A doctor helps sick people get well. A police officer keeps us safe." },
+            { type: "activity", instruction: "Match each helper to their job:", items: ["Doctor — heals the sick", "Police officer — keeps order", "Shopkeeper — sells goods"] },
+          ],
+          activities: [
+            { type: "matching", pairs: [{ left: "Doctor", right: "Heals the sick" }, { left: "Police officer", right: "Keeps order" }, { left: "Shopkeeper", right: "Sells goods" }] },
+            { type: "multiple_choice", question: "Who helps keep our community safe?", options: ["Shopkeeper", "Police officer", "Farmer", "Driver"], answer: "Police officer" },
+          ],
+          funFact: "Some Kenyan communities have their own local chiefs (machifu) who help solve problems together!",
+        },
+      ],
+    },
+  ],
+  // ── G2 Creative Arts & Sports ──────────────────────────────────────────────
+  "G2-creative-arts": [
+    {
+      sequence: 1,
+      title: "Kenyan Traditional Games",
+      outcomes: [
+        "Name traditional Kenyan games",
+        "Explain the rules of a simple traditional game",
+        "Play a traditional game safely with others",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Let's Play Bao",
+          objective: "By the end of this lesson, the learner should be able to describe how a traditional Kenyan game is played.",
+          content: [
+            { type: "introduction", text: "Long before phones and screens, children played fun games using seeds and boards!" },
+            { type: "explanation", text: "Bao is a traditional board game played by moving seeds between small pits, trying to capture your opponent's seeds.", example: "Two players take turns moving seeds around the board to collect the most." },
+            { type: "activity", instruction: "Talk about games you play with friends:", items: ["What game do you play most?", "Does it use a ball, seeds, or something else?", "How many players does it need?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What is used to play Bao?", options: ["A ball", "Seeds and a board", "A rope", "Cards"], answer: "Seeds and a board" },
+          ],
+          funFact: "Bao-style games are played across many African countries, each with slightly different rules!",
+        },
+      ],
+    },
+  ],
+  // ── G2 Religious Education ─────────────────────────────────────────────────
+  "G2-religious-education": [
+    {
+      sequence: 1,
+      title: "Caring for Creation",
+      outcomes: [
+        "Explain why the environment should be cared for",
+        "Describe simple ways to protect nature",
+        "Practise caring for plants and animals",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Looking After Our World",
+          objective: "By the end of this lesson, the learner should be able to describe simple ways to care for the environment.",
+          content: [
+            { type: "introduction", text: "Our world is a gift — trees, animals, rivers, and mountains. How can we take care of it?" },
+            { type: "explanation", text: "We care for creation by not littering, planting trees, and being gentle with animals.", example: "Picking up litter and putting it in a bin helps keep our environment clean." },
+            { type: "activity", instruction: "Think of one way you can care for nature today:", items: ["Plant a seed", "Pick up litter", "Give water to a plant"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Which action helps care for the environment?", options: ["Littering", "Planting a tree", "Cutting trees for fun", "Wasting water"], answer: "Planting a tree" },
+          ],
+          funFact: "One mature tree can absorb about 22 kilograms of carbon dioxide from the air each year!",
+        },
+      ],
+    },
+  ],
+  // ── G3 English ─────────────────────────────────────────────────────────────
+  "G3-english": [
+    {
+      sequence: 1,
+      title: "Writing Simple Paragraphs",
+      outcomes: [
+        "Write a paragraph with a clear main idea",
+        "Use correct punctuation in sentences",
+        "Organise ideas in a logical order",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "My First Paragraph",
+          objective: "By the end of this lesson, the learner should be able to write a short paragraph of 3-4 related sentences.",
+          content: [
+            { type: "introduction", text: "A paragraph is a group of sentences that all talk about one idea." },
+            { type: "explanation", text: "Start with a main sentence, then add sentences that give more details about it.", example: "My dog is called Simba. He is brown and white. He loves to run in the garden. I feed him every morning." },
+            { type: "activity", instruction: "Plan a paragraph about your favourite animal:", items: ["Write a main sentence", "Add two detail sentences", "Add an ending sentence"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What should a paragraph's sentences all share?", options: ["The same length", "One main idea", "Rhyming words", "Capital letters only"], answer: "One main idea" },
+            { type: "fill_blank", sentence: "A group of related sentences is called a ___.", answer: "paragraph" },
+          ],
+          funFact: "The longest sentence in a published novel has over 13,000 words — but good paragraphs for beginners stay short!",
+        },
+      ],
+    },
+  ],
+  // ── G3 Kiswahili ───────────────────────────────────────────────────────────
+  "G3-kiswahili": [
+    {
+      sequence: 1,
+      title: "Kusoma na Kuandika Sentensi",
+      outcomes: [
+        "Kusoma sentensi fupi kwa ufasaha",
+        "Kuandika sentensi sahihi",
+        "Kutumia alama za uandishi ipasavyo",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Sentensi Yangu ya Kwanza",
+          objective: "By the end of this lesson, the learner should be able to write a simple, correctly punctuated Kiswahili sentence.",
+          content: [
+            { type: "introduction", text: "Sentensi ni maneno yaliyopangwa vizuri ili kutoa maana kamili." },
+            { type: "explanation", text: "Sentensi huanza na herufi kubwa na huishia na alama ya kuishia, kama nukta.", example: "Mama anapika chakula. Watoto wanacheza nje." },
+            { type: "activity", instruction: "Tunga sentensi kuhusu picha hizi:", items: ["Mvulana anasoma kitabu.", "Msichana anaimba wimbo.", "Mbwa anakimbia shambani."] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "Sentensi huanza na herufi gani?", options: ["Ndogo", "Kubwa", "Namba", "Alama"], answer: "Kubwa" },
+            { type: "fill_blank", sentence: "Mama ___ chakula.", answer: "anapika" },
+          ],
+          funFact: "Kiswahili is one of the official languages of the African Union!",
+        },
+      ],
+    },
+  ],
+  // ── G3 Mathematics ─────────────────────────────────────────────────────────
+  "G3-mathematics": [
+    {
+      sequence: 1,
+      title: "Multiplication Tables 1 to 5",
+      outcomes: [
+        "Recite multiplication tables for 1 to 5",
+        "Solve simple multiplication problems",
+        "Relate multiplication to repeated addition",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Multiplying by 2",
+          objective: "By the end of this lesson, the learner should be able to multiply single-digit numbers by 2.",
+          content: [
+            { type: "introduction", text: "Multiplication is a fast way to add the same number many times!" },
+            { type: "explanation", text: "Multiplying by 2 means adding a number to itself.", example: "3 x 2 means 3 + 3 = 6. So 3 x 2 = 6." },
+            { type: "activity", instruction: "Work these out using repeated addition:", items: ["4 x 2 = 4 + 4 = ?", "5 x 2 = 5 + 5 = ?", "6 x 2 = 6 + 6 = ?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What is 7 x 2?", options: ["12", "14", "16", "9"], answer: "14" },
+            { type: "fill_blank", sentence: "5 x 2 = ___.", answer: "10" },
+          ],
+          funFact: "The multiplication sign '×' was first used in a math book printed in 1631!",
+        },
+      ],
+    },
+  ],
+  // ── G3 Environmental & Social Studies ─────────────────────────────────────
+  "G3-ess": [
+    {
+      sequence: 1,
+      title: "Counties of Kenya",
+      outcomes: [
+        "Name several counties of Kenya",
+        "Locate their own county on a simple map",
+        "Describe one feature of their county",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Kenya Has 47 Counties",
+          objective: "By the end of this lesson, the learner should be able to name at least five Kenyan counties.",
+          content: [
+            { type: "introduction", text: "Kenya is divided into 47 counties, each with its own special features!" },
+            { type: "explanation", text: "A county is a region of Kenya with its own local government. Examples include Nairobi, Mombasa, Kisumu, Nakuru, and Kiambu.", example: "Mombasa County is known for its beaches. Nakuru County is known for its lakes." },
+            { type: "activity", instruction: "Name a county and one thing it is known for:", items: ["Which county do you live in?", "What is your county known for?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "How many counties does Kenya have?", options: ["25", "36", "47", "52"], answer: "47" },
+            { type: "fill_blank", sentence: "Mombasa County is known for its ___.", answer: "beaches" },
+          ],
+          funFact: "Kenya's counties were created under the 2010 Constitution to bring government services closer to the people!",
+        },
+      ],
+    },
+  ],
+  // ── G3 Creative Arts & Sports ──────────────────────────────────────────────
+  "G3-creative-arts": [
+    {
+      sequence: 1,
+      title: "Music and Rhythm",
+      outcomes: [
+        "Identify simple musical instruments",
+        "Keep a steady beat using clapping or drumming",
+        "Sing a song as part of a group",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Finding the Beat",
+          objective: "By the end of this lesson, the learner should be able to keep a steady beat while singing a simple song.",
+          content: [
+            { type: "introduction", text: "Music has a heartbeat too — we call it rhythm! Let's find it together." },
+            { type: "explanation", text: "Rhythm is a repeated pattern of sound. You can make rhythm by clapping, tapping, or drumming.", example: "Clap: 1-2-3-4, 1-2-3-4 — that steady pattern is a rhythm." },
+            { type: "activity", instruction: "Clap along to this pattern:", items: ["Clap, clap, pause, clap", "Clap, pause, clap, clap", "Repeat it faster!"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What do we call a repeated pattern of sound?", options: ["Melody", "Rhythm", "Silence", "Pitch"], answer: "Rhythm" },
+          ],
+          funFact: "The traditional Kenyan drum, the 'ngoma', has been used for both music and communication for centuries!",
+        },
+      ],
+    },
+  ],
+  // ── G3 Religious Education ─────────────────────────────────────────────────
+  "G3-religious-education": [
+    {
+      sequence: 1,
+      title: "Respecting Different Beliefs",
+      outcomes: [
+        "Explain that people hold different beliefs",
+        "Show respect for people of other faiths",
+        "Describe one value shared across many beliefs",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "We Are Different, We Are Friends",
+          objective: "By the end of this lesson, the learner should be able to explain why we should respect people of different beliefs.",
+          content: [
+            { type: "introduction", text: "In Kenya, families follow many different beliefs — and that is something to celebrate!" },
+            { type: "explanation", text: "Even when people believe different things, most beliefs teach kindness, honesty, and caring for others.", example: "A classmate may pray differently from you, but you can still be great friends." },
+            { type: "activity", instruction: "Think about a value most beliefs share:", items: ["Being honest", "Being kind", "Helping others"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "How should we treat classmates with different beliefs?", options: ["Ignore them", "With respect", "Avoid them", "Make fun of them"], answer: "With respect" },
+          ],
+          funFact: "Kenya's constitution protects the freedom of every person to follow their own religion!",
         },
       ],
     },
@@ -344,12 +838,13 @@ async function main() {
       for (const unitData of units) {
         const unit = await db.unit.upsert({
           where: { subjectId_sequence: { subjectId: subject.id, sequence: unitData.sequence } },
-          update: {},
+          update: unitData.targetLessonCount != null ? { targetLessonCount: unitData.targetLessonCount } : {},
           create: {
             subjectId: subject.id,
             sequence: unitData.sequence,
             title: unitData.title,
             outcomes: unitData.outcomes,
+            ...(unitData.targetLessonCount != null ? { targetLessonCount: unitData.targetLessonCount } : {}),
           },
         });
 

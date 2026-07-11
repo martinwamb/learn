@@ -1,9 +1,10 @@
 /**
- * Lesson Generator Worker — runs nightly at 03:00 EAT via PM2 cron.
+ * Lesson Generator Worker — runs nightly at 04:30 UTC via PM2 cron, inside Ollama's
+ * 22:00-06:00 UTC active window but clear of port/publisher-site's own cron minutes.
  * Uses Ollama (Qwen 2.5, already on the Hetzner server) to generate
  * new CBC-aligned lessons for units that are below their targetLessonCount.
  *
- * PM2: pm2 start workers/lesson-generator.js --name learn-lesson-worker --cron "0 3 * * *"
+ * PM2: pm2 start workers/lesson-generator.js --name learn-lesson-worker --cron "30 4 * * *"
  */
 
 import "dotenv/config";
@@ -11,8 +12,12 @@ import { createScriptDb } from "../lib/db-script";
 
 const db = createScriptDb();
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:14b";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:3b";
 const MAX_LESSONS_PER_UNIT = Number(process.env.LESSON_GEN_MAX_PER_UNIT ?? 5);
+// Ceiling on total lessons generated across ALL units in one run, so expanding the
+// curriculum (more units) doesn't spike a single night's Ollama load -- a bigger
+// backlog just spreads generation over more nights instead of one long run.
+const MAX_TOTAL_PER_RUN = Number(process.env.LESSON_GEN_MAX_TOTAL_PER_RUN ?? 8);
 
 interface GeneratedLesson {
   title: string;
@@ -47,6 +52,24 @@ function buildPrompt(
   outcomes: string[],
   existingTitles: string[]
 ): string {
+  // PP1/PP2 (ages 4-6) are pre-readers: typing (fill_blank) and reading two columns
+  // to operate a dropdown (matching) are a poor fit. Keep them to tap-only
+  // multiple_choice with short, concrete options, and fewer of them per lesson.
+  const isPreReader = gradeCode.startsWith("PP");
+  const activityGuidance = isPreReader
+    ? `- Include exactly 2 activities, ALL of type "multiple_choice" only (no fill_blank, no matching -- this age group cannot type or operate dropdowns yet)
+- Keep each question's options short (1-3 words), concrete, and easy to pair with a picture/emoji`
+    : `- Include 2-4 activities (mix of multiple_choice, fill_blank, and matching types)`;
+  const activitiesExample = isPreReader
+    ? `  "activities": [
+    { "type": "multiple_choice", "question": "...", "options": ["...", "...", "...", "..."], "answer": "..." },
+    { "type": "multiple_choice", "question": "...", "options": ["...", "...", "...", "..."], "answer": "..." }
+  ],`
+    : `  "activities": [
+    { "type": "multiple_choice", "question": "...", "options": ["...", "...", "...", "..."], "answer": "..." },
+    { "type": "fill_blank", "sentence": "The ___ is ...", "answer": "..." }
+  ],`;
+
   return `You are a Kenya CBC curriculum expert writing lessons for ${gradeName} (age ${gradeCode.startsWith("PP") ? "4-6" : gradeCode.replace("G", "") + " class"}) students.
 
 Subject: ${subjectName}
@@ -60,7 +83,7 @@ ${existingTitles.length ? existingTitles.map((t) => `- ${t}`).join("\n") : "None
 Create ONE new, age-appropriate lesson for this unit. The lesson must:
 - Be fun, engaging, and suitable for Kenyan children
 - Use simple language and relatable examples (Kenyan animals, foods, places, names)
-- Include 2-4 activities (mix of multiple_choice, fill_blank, and matching types)
+${activityGuidance}
 - NOT duplicate any existing lesson title listed above
 
 Respond with ONLY valid JSON matching this exact structure:
@@ -72,10 +95,7 @@ Respond with ONLY valid JSON matching this exact structure:
     { "type": "explanation", "text": "...", "example": "..." },
     { "type": "activity", "instruction": "...", "items": ["...", "..."] }
   ],
-  "activities": [
-    { "type": "multiple_choice", "question": "...", "options": ["...", "...", "...", "..."], "answer": "..." },
-    { "type": "fill_blank", "sentence": "The ___ is ...", "answer": "..." }
-  ],
+${activitiesExample}
   "funFact": "An interesting fact related to the topic..."
 }`;
 }
@@ -188,6 +208,10 @@ async function run() {
   const errors: string[] = [];
 
   for (const unit of underStocked) {
+    if (totalCreated >= MAX_TOTAL_PER_RUN) {
+      console.log(`  ⏸️  Reached MAX_TOTAL_PER_RUN (${MAX_TOTAL_PER_RUN}) — remaining units continue next run`);
+      break;
+    }
     try {
       const created = await generateLessonsForUnit(unit.id);
       totalCreated += created;
