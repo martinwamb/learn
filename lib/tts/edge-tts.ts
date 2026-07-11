@@ -8,12 +8,20 @@ import os from "os";
 const EDGE_TTS_BIN = process.env.EDGE_TTS_BIN ?? "/home/admin/edge-tts-venv/bin/edge-tts";
 
 export const DEFAULT_NARRATOR_VOICE = "en-KE-AsiliaNeural";
+// Microsoft's default speaking rate reads a bit fast for 4-6 year olds -- the old,
+// removed browser speechSynthesis code explicitly used rate=0.88 (~12% slower).
+export const DEFAULT_NARRATOR_RATE = "-10%";
 
 // Generates an MP3 file for the given text using the edge-tts CLI (network-based
 // Microsoft neural TTS -- no local model, no CPU load, unlike Ollama/Kokoro).
-export async function generateSpeech(text: string, voice: string, outputPath: string): Promise<void> {
+export async function generateSpeech(
+  text: string,
+  voice: string,
+  outputPath: string,
+  rate: string = DEFAULT_NARRATOR_RATE
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = ["-t", text, "-v", voice, "--write-media", outputPath];
+    const args = ["-t", text, "-v", voice, "--rate", rate, "--write-media", outputPath];
     const proc = spawn(EDGE_TTS_BIN, args);
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d.toString(); });

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLessonNarrator } from "@/hooks/useLessonNarrator";
-import type { Activity } from "@/hooks/useLessonNarrator";
+import type { Activity, ContentBlock } from "@/hooks/useLessonNarrator";
+import MediaImage from "@/components/lesson/MediaImage";
+import { deriveMediaQuery } from "@/lib/media/query";
 
 interface Props {
   lesson: {
@@ -50,6 +52,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   // ── Audio refs (initialised after mount) ─────────────────────────────────
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const sfxRef = useRef<Record<string, HTMLAudioElement>>({});
+  const itemSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -70,9 +73,12 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   }, []);
 
   // Propagate mute toggle to all audio elements
+  const mutedRef = useRef(muted);
   useEffect(() => {
+    mutedRef.current = muted;
     if (bgMusicRef.current) bgMusicRef.current.muted = muted;
     Object.values(sfxRef.current).forEach((a) => { a.muted = muted; });
+    if (itemSoundRef.current) itemSoundRef.current.muted = muted;
   }, [muted]);
 
   // ── Narrator hook ─────────────────────────────────────────────────────────
@@ -85,6 +91,30 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
   });
 
   const clip = clipForPhase(narrator.phase, narrator.feedback);
+
+  // Current content block, so we know whether the item being narrated right now is a
+  // "sound-match" activity (point-to-the-picture) that should show a picture and play
+  // a sound -- NOT every activity block's items are this shape, so this is opt-in.
+  const currentBlock = (lesson.content as ContentBlock[])[narrator.contentIdx];
+  const isSoundMatch = currentBlock?.type === "activity" && currentBlock.mediaKind === "sound-match";
+  const currentItemQuery = narrator.currentItem ? deriveMediaQuery(narrator.currentItem) : null;
+
+  // Play the item's sound effect (fire-and-forget, in parallel with MediaImage's own
+  // fetch below -- don't block narration pacing on either resolving). Reads mutedRef
+  // rather than depending on `muted` directly so toggling mute doesn't re-fetch/replay.
+  useEffect(() => {
+    itemSoundRef.current?.pause();
+    if (!isSoundMatch || !currentItemQuery) return;
+    fetch(`/api/media/sound?query=${encodeURIComponent(currentItemQuery)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then(({ url }: { url: string }) => {
+        const audio = new Audio(url);
+        audio.muted = mutedRef.current;
+        itemSoundRef.current = audio;
+        audio.play().catch(() => {});
+      })
+      .catch(() => {});
+  }, [isSoundMatch, currentItemQuery]);
 
   // Swap video src when clip changes
   useEffect(() => {
@@ -342,10 +372,17 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
 
       {/* Spoken text card */}
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-h-[72px] flex items-center justify-center">
-        <p className="text-lg text-gray-700 text-center leading-snug font-medium">
+        <p className="text-xl text-gray-700 text-center leading-snug font-medium">
           {narrator.currentText || lesson.title}
         </p>
       </div>
+
+      {/* Sound-match item picture -- only for activity blocks explicitly tagged
+          mediaKind: "sound-match" (e.g. "point to the picture when you hear its
+          sound"), never inferred from items[] shape alone */}
+      {isSoundMatch && currentItemQuery && (
+        <MediaImage query={currentItemQuery} className="w-40 h-40" />
+      )}
 
       {/* Feedback banner */}
       {narrator.feedback && (
@@ -371,7 +408,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
                   key={opt}
                   disabled={!!narrator.feedback}
                   onClick={() => handleOptionTap(opt)}
-                  className={`h-16 rounded-2xl border-2 font-bold text-base transition-all flex items-center justify-center gap-2 ${
+                  className={`h-16 rounded-2xl border-2 font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                     selectedOpt === opt
                       ? narrator.feedback === "correct"
                         ? "bg-green-200 border-green-500 text-green-900 scale-105"
@@ -427,7 +464,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
                         key={p.left}
                         disabled={!!narrator.feedback}
                         onClick={() => handleLeftTap(p.left)}
-                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-sm border-2 transition-all ${
+                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-base border-2 transition-all ${
                           isMatched
                             ? "bg-green-100 border-green-400 text-green-900"
                             : isSelected
@@ -448,7 +485,7 @@ export default function AudioGuidedPlayer({ lesson, gradeCode, subjectSlug }: Pr
                         key={right}
                         disabled={!!narrator.feedback || isTaken || !selectedLeft}
                         onClick={() => handleRightTap(right)}
-                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-sm border-2 transition-all ${
+                        className={`w-full h-12 rounded-xl flex items-center justify-center font-semibold text-base border-2 transition-all ${
                           isTaken
                             ? "bg-green-100 border-green-400 text-green-900"
                             : selectedLeft

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AudioGuidedPlayer from "@/components/lesson/AudioGuidedPlayer";
+import MediaImage from "@/components/lesson/MediaImage";
+import { deriveMediaQuery } from "@/lib/media/query";
 
 interface ContentBlock {
   type: "introduction" | "explanation" | "activity";
@@ -10,6 +12,7 @@ interface ContentBlock {
   example?: string;
   instruction?: string;
   items?: string[];
+  mediaKind?: "sound-match";
 }
 
 interface Activity {
@@ -46,6 +49,19 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [score, setScore] = useState(0);
   const [saving, setSaving] = useState(false);
+  const itemSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  function playItemSound(query: string) {
+    itemSoundRef.current?.pause();
+    fetch(`/api/media/sound?query=${encodeURIComponent(query)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then(({ url }: { url: string }) => {
+        const audio = new Audio(url);
+        itemSoundRef.current = audio;
+        audio.play().catch(() => {});
+      })
+      .catch(() => {});
+  }
 
   if (audioMode) {
     return (
@@ -109,11 +125,11 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
         {(lesson.content as ContentBlock[]).map((block, i) => (
           <div key={i} className="bg-white rounded-2xl p-5 shadow-sm">
             {block.type === "introduction" && (
-              <p className="text-gray-700 text-lg leading-relaxed">{block.text}</p>
+              <p className="text-gray-700 text-xl leading-relaxed">{block.text}</p>
             )}
             {block.type === "explanation" && (
               <>
-                <p className="text-gray-700 leading-relaxed mb-3">{block.text}</p>
+                <p className="text-gray-700 text-lg leading-relaxed mb-3">{block.text}</p>
                 {block.example && (
                   <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-r-xl p-3 text-sm text-yellow-800 whitespace-pre-line">
                     {block.example}
@@ -121,12 +137,32 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
                 )}
               </>
             )}
-            {block.type === "activity" && (
+            {block.type === "activity" && block.mediaKind === "sound-match" && (
               <>
-                <p className="font-semibold text-gray-700 mb-2">{block.instruction}</p>
+                <p className="font-semibold text-gray-700 text-lg mb-3">{block.instruction}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(block.items ?? []).map((item, j) => {
+                    const query = deriveMediaQuery(item);
+                    return (
+                      <button
+                        key={j}
+                        onClick={() => playItemSound(query)}
+                        className="flex flex-col items-center gap-2 bg-orange-50 rounded-2xl p-3 hover:bg-orange-100 transition-colors"
+                      >
+                        <MediaImage query={query} className="w-full h-24" />
+                        <span className="text-gray-700 text-base font-medium">{item} 🔊</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {block.type === "activity" && block.mediaKind !== "sound-match" && (
+              <>
+                <p className="font-semibold text-gray-700 text-lg mb-2">{block.instruction}</p>
                 <ul className="space-y-1">
                   {(block.items ?? []).map((item, j) => (
-                    <li key={j} className="text-gray-600 pl-4 border-l-2 border-orange-200">{item}</li>
+                    <li key={j} className="text-gray-600 text-base pl-4 border-l-2 border-orange-200">{item}</li>
                   ))}
                 </ul>
               </>
@@ -170,13 +206,13 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
         <div className="bg-white rounded-2xl p-6 shadow-sm">
           {currentActivity.type === "multiple_choice" && (
             <>
-              <p className="font-semibold text-gray-800 text-lg mb-5">{currentActivity.question}</p>
+              <p className="font-semibold text-gray-800 text-xl mb-5">{currentActivity.question}</p>
               <div className="grid grid-cols-2 gap-3">
                 {(currentActivity.options ?? []).map((opt) => (
                   <button
                     key={opt}
                     onClick={() => !feedback && setSelected(opt)}
-                    className={`py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                    className={`py-3 px-4 rounded-xl border-2 text-lg font-medium transition-all ${
                       selected === opt
                         ? feedback === "correct" ? "bg-green-100 border-green-500 text-green-800"
                           : feedback === "wrong" ? "bg-red-100 border-red-400 text-red-800"
@@ -193,7 +229,7 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
 
           {currentActivity.type === "fill_blank" && (
             <>
-              <p className="font-semibold text-gray-800 text-lg mb-5">
+              <p className="font-semibold text-gray-800 text-xl mb-5">
                 {(currentActivity.sentence ?? "").replace("___", "________")}
               </p>
               <input
@@ -201,18 +237,18 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
                 value={fillValue}
                 onChange={(e) => !feedback && setFillValue(e.target.value)}
                 placeholder="Type your answer..."
-                className="w-full border-2 border-gray-200 rounded-xl p-3 text-lg focus:border-orange-400 focus:outline-none"
+                className="w-full border-2 border-gray-200 rounded-xl p-3 text-xl focus:border-orange-400 focus:outline-none"
               />
             </>
           )}
 
           {currentActivity.type === "matching" && (
             <>
-              <p className="font-semibold text-gray-800 mb-5">Match the items:</p>
+              <p className="font-semibold text-gray-800 text-lg mb-5">Match the items:</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   {(currentActivity.pairs ?? []).map((pair) => (
-                    <div key={pair.left} className="bg-blue-50 rounded-xl p-3 text-center font-medium text-blue-800">
+                    <div key={pair.left} className="bg-blue-50 rounded-xl p-3 text-center font-medium text-lg text-blue-800">
                       {pair.left}
                     </div>
                   ))}
@@ -225,7 +261,7 @@ export default function LessonPlayer({ lesson, gradeCode, subjectSlug }: LessonP
                       onChange={(e) =>
                         !feedback && setMatchSelections((prev) => ({ ...prev, [pair.left]: e.target.value }))
                       }
-                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-orange-400 focus:outline-none"
+                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-base focus:border-orange-400 focus:outline-none"
                     >
                       <option value="">Select...</option>
                       {(currentActivity.pairs ?? []).map((p) => (

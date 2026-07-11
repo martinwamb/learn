@@ -4,9 +4,13 @@
 # Idempotent — skips files that already exist.
 set -e
 
-API_KEY="bcv8iLR9GQKCoE8iGv3z6ZjQwRizEoEG5YEwfuLY"
+if [ -z "$FREESOUND_API_KEY" ]; then
+  echo "FREESOUND_API_KEY is not set (check .env / export it before running this script)." >&2
+  exit 1
+fi
+API_KEY="$FREESOUND_API_KEY"
 BASE_URL="https://freesound.org/apiv2/search/text/"
-OUT_DIR="/var/www/learn/public/audio/sfx"
+OUT_DIR="./public/audio/sfx"
 
 mkdir -p "$OUT_DIR"
 

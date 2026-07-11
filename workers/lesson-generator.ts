@@ -85,6 +85,12 @@ Create ONE new, age-appropriate lesson for this unit. The lesson must:
 - Use simple language and relatable examples (Kenyan animals, foods, places, names)
 ${activityGuidance}
 - NOT duplicate any existing lesson title listed above
+- If (and ONLY if) an "activity" content block is a "point to the picture when you hear
+  its sound" style exercise, where each item is a concrete object plus its sound (e.g.
+  "Drum — boom boom!"), add "mediaKind": "sound-match" to that block so a real picture
+  and sound clip can be looked up per item. Do NOT add it to blocks whose items are
+  physical actions, poem lines, math, dialogue, or anything else that isn't literally
+  an object-plus-its-sound.
 
 Respond with ONLY valid JSON matching this exact structure:
 {

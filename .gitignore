@@ -46,3 +46,5 @@ next-env.d.ts
 
 # generated at runtime on the server
 /public/audio/tts-cache/
+/public/media/images/
+/public/media/sounds/

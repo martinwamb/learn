@@ -277,7 +277,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
           content: [
             { type: "introduction", text: "Close your eyes and listen... What do you hear? Sounds are all around us!" },
             { type: "explanation", text: "Everything that moves makes a sound. Animals, vehicles, instruments — they all have their own sounds.", example: "A dog says 'woof!', a cat says 'meow!', rain goes 'pitter-patter'." },
-            { type: "activity", instruction: "Point to the picture when you hear its sound:", items: ["Drum — boom boom!", "Bell — ring ring!", "Rain — pitter patter!", "Clap — clap clap!"] },
+            { type: "activity", mediaKind: "sound-match", instruction: "Point to the picture when you hear its sound:", items: ["Drum — boom boom!", "Bell — ring ring!", "Rain — pitter patter!", "Clap — clap clap!"] },
           ],
           activities: [
             { type: "matching", pairs: [{ left: "Dog", right: "Woof" }, { left: "Cat", right: "Meow" }, { left: "Cow", right: "Moo" }, { left: "Bird", right: "Tweet" }] },

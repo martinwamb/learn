@@ -18,6 +18,11 @@ export interface ContentBlock {
   example?: string;
   instruction?: string;
   items?: string[];
+  // Explicit opt-in for "point to the picture when you hear its sound" style
+  // activities. Most activity blocks are physical actions, poem lines, math, etc. --
+  // NOT a picture/sound-lookup target -- so media only fetches when this is set,
+  // never inferred from items[] shape alone.
+  mediaKind?: "sound-match";
 }
 
 export interface Activity {
@@ -45,6 +50,9 @@ interface NarratorState {
   isListening: boolean;
   currentText: string;
   feedback: "correct" | "wrong" | null;
+  // Item currently being narrated within a "sound-match" activity content block, so
+  // the UI can show a matching picture/sound. Null outside that stepping loop.
+  currentItem: string | null;
 }
 
 const CORRECT_PHRASES = [
@@ -70,6 +78,7 @@ export function useLessonNarrator(lesson: LessonData) {
     isListening: false,
     currentText: "",
     feedback: null,
+    currentItem: null,
   });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -135,6 +144,7 @@ export function useLessonNarrator(lesson: LessonData) {
         phase: "narrating-content",
         contentIdx: i,
         currentText: block.text ?? block.instruction ?? block.example ?? "",
+        currentItem: null,
       }));
 
       if (block.type === "introduction" && block.text) {
@@ -145,7 +155,17 @@ export function useLessonNarrator(lesson: LessonData) {
       } else if (block.type === "activity") {
         if (block.instruction) await speak(block.instruction);
         if (block.items?.length) {
-          await speak(block.items.join(". "));
+          // Step through items one at a time (rather than one combined utterance) so
+          // the UI can update per item -- this is what actually fixes the narration
+          // racing ahead of the display. mediaKind gates whether a picture/sound is
+          // ALSO looked up per item; the pacing fix itself applies to every block.
+          for (const item of block.items) {
+            if (cancelledRef.current) return;
+            setState((s) => ({ ...s, currentItem: item }));
+            await speak(item);
+            await delay(800);
+          }
+          setState((s) => ({ ...s, currentItem: null }));
         }
       }
       await delay(300);
@@ -329,6 +349,7 @@ export function useLessonNarrator(lesson: LessonData) {
     score: state.score,
     feedback: state.feedback,
     currentText: state.currentText,
+    currentItem: state.currentItem,
     isListening: state.isListening,
     start,
     stop,
