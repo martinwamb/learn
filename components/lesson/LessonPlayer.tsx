@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useLessonPlayer } from "@/hooks/useLessonPlayer";
 import type { Activity, QuestionStatus, Screen } from "@/hooks/useLessonPlayer";
 import MediaImage from "@/components/lesson/MediaImage";
-import { deriveMediaQuery } from "@/lib/media/query";
 import { seededShuffle } from "@/lib/lesson/shuffle";
 
 interface Props {
@@ -179,10 +178,13 @@ export default function LessonPlayer({ lesson, gradeCode }: Props) {
       .catch(() => {});
   }, []);
 
-  // Auto-play the sound for a sound-match "item" screen as soon as it's shown
+  // Auto-play the sound for a picture-match item screen as soon as it's shown
+  // (only when that item actually has a sound -- e.g. colors have none). Searches
+  // by `label` (the concrete noun, e.g. "Drum"), not the onomatopoeia text in
+  // `sound` -- Freesound has real drum sounds tagged "drum", not "boom boom".
   useEffect(() => {
-    if (screen.kind === "item" && screen.mediaKind === "sound-match") {
-      playItemSound(deriveMediaQuery(screen.item));
+    if (screen.kind === "picture-item" && screen.sound) {
+      playItemSound(screen.label);
     } else {
       itemSoundRef.current?.pause();
     }
@@ -336,52 +338,44 @@ export default function LessonPlayer({ lesson, gradeCode }: Props) {
         </div>
       )}
 
-      {/* ── item (single sound-match / short list entry) ─────────────────────── */}
+      {/* ── item (single short list entry, plain text -- never a picture target) ── */}
       {screen.kind === "item" && (
         <div className="w-full max-w-md flex flex-col items-center space-y-3">
           {screen.instruction && <p className="text-gray-500 text-base text-center">{screen.instruction}</p>}
-          {screen.mediaKind === "sound-match" && (
-            <MediaImage query={deriveMediaQuery(screen.item)} className="w-40 h-40" />
-          )}
           <p className="text-xl text-gray-700 text-center font-medium">{screen.item}</p>
         </div>
       )}
 
-      {/* ── item-group (long lists grouped into one screen) ──────────────────── */}
+      {/* ── item-group (long lists grouped into one screen, plain text) ──────────── */}
       {screen.kind === "item-group" && (
         <div className="w-full max-w-md space-y-3">
           <p className="font-semibold text-gray-700 text-lg text-center">{screen.instruction}</p>
-          {screen.mediaKind === "sound-match" ? (
-            <div className="grid grid-cols-2 gap-3">
-              {screen.items.map((item, i) => {
-                const q = deriveMediaQuery(item);
-                return (
-                  <button
-                    key={i}
-                    onClick={() => playItemSound(q)}
-                    className="flex flex-col items-center gap-2 bg-orange-50 rounded-2xl p-3 hover:bg-orange-100 transition-colors"
-                  >
-                    <MediaImage query={q} className="w-full h-20" />
-                    <span className="text-gray-700 text-sm font-medium">{item} 🔊</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <ul className="space-y-1">
-              {screen.items.map((item, i) => (
-                <li key={i} className="text-gray-600 text-base pl-4 border-l-2 border-orange-200">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="space-y-1">
+            {screen.items.map((item, i) => (
+              <li key={i} className="text-gray-600 text-base pl-4 border-l-2 border-orange-200">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ── picture-item (always shows a picture; sound is optional per item) ────── */}
+      {screen.kind === "picture-item" && (
+        <div className="w-full max-w-md flex flex-col items-center space-y-3">
+          {screen.instruction && <p className="text-gray-500 text-base text-center">{screen.instruction}</p>}
+          <MediaImage query={screen.label} className="w-40 h-40" />
+          <div className="text-center">
+            <p className="text-xl text-gray-700 font-medium">{screen.label}</p>
+            {screen.sound && <p className="text-sm text-gray-400 italic">{screen.sound}</p>}
+          </div>
         </div>
       )}
 
       {/* ── question ──────────────────────────────────────────────────────────── */}
       {screen.kind === "question" && currentAct && (
         <div className="w-full max-w-md space-y-4">
+          {currentAct.image && <MediaImage query={currentAct.image} className="w-40 h-40 mx-auto" />}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
             <p className="text-xl font-semibold text-gray-800">
               {currentAct.type === "multiple_choice" && currentAct.question}

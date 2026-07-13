@@ -66,6 +66,10 @@ function getScreenNarration(screen: Screen, lesson: LessonData): string {
       return screen.instruction
         ? `${screen.instruction} ${screen.items.join(". ")}`
         : screen.items.join(". ");
+    case "picture-item":
+      return screen.itemIdx === 0 && screen.instruction
+        ? `${screen.instruction} ${screen.label}`
+        : screen.label;
     case "memory-verse":
       return `${screen.text} — ${screen.reference}`;
     case "funfact":
@@ -213,6 +217,22 @@ export function useLessonPlayer(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenIdx, audioMode]);
+
+  // Prefetch the next screen's narration audio while the current one is showing, so
+  // forward navigation doesn't have to wait on a cache-miss TTS round trip -- reduces
+  // latency-related playback timing issues. Skips "complete" since its narration
+  // embeds `score`, which may not be final yet if the next screen is the last
+  // unanswered question -- prefetching it here could bake in a stale score.
+  useEffect(() => {
+    if (!audioMode) return;
+    const nextIdx = screenIdx + 1;
+    if (nextIdx >= screens.length) return;
+    const nextScreen = screens[nextIdx];
+    if (nextScreen.kind === "welcome" || nextScreen.kind === "complete") return;
+    const text = getScreenNarration(nextScreen, lesson);
+    if (!text) return;
+    fetch(`/api/tts/speak?text=${encodeURIComponent(text)}`).catch(() => {});
+  }, [screenIdx, audioMode, screens, lesson]);
 
   const canGoNext = !(screen.kind === "question" && answers[screenIdx] == null);
   const canGoBack = screenIdx > 0;

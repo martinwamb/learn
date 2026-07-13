@@ -85,12 +85,17 @@ Create ONE new, age-appropriate lesson for this unit. The lesson must:
 - Use simple language and relatable examples (Kenyan animals, foods, places, names)
 ${activityGuidance}
 - NOT duplicate any existing lesson title listed above
-- If (and ONLY if) an "activity" content block is a "point to the picture when you hear
-  its sound" style exercise, where each item is a concrete object plus its sound (e.g.
-  "Drum — boom boom!"), add "mediaKind": "sound-match" to that block so a real picture
-  and sound clip can be looked up per item. Do NOT add it to blocks whose items are
-  physical actions, poem lines, math, dialogue, or anything else that isn't literally
-  an object-plus-its-sound.
+- For a normal "activity" content block, "items" MUST be a flat array of plain
+  strings, e.g. ["Touch your nose", "Jump twice"] -- NEVER an array of objects like
+  [{"item": "...", "sound_effect": "..."}]. If you want one object/picture per item,
+  that is NOT a plain "activity" -- use "picture-match" instead, described next.
+- If (and ONLY if) you want a "point to the picture when you hear its sound" style
+  exercise (a concrete object plus its sound, e.g. a drum going "boom boom"), use a
+  SEPARATE content block with "type": "picture-match" and "pictureItems": an array of
+  {"label": "...", "sound": "..."} objects. "label" is the object's name (used to find
+  a real picture of it) and "sound" is optional onomatopoeia text -- omit "sound"
+  entirely for a visual-only exercise with nothing to listen for (e.g. matching colors
+  or shapes).
 
 Respond with ONLY valid JSON matching this exact structure:
 {
@@ -103,7 +108,11 @@ Respond with ONLY valid JSON matching this exact structure:
   ],
 ${activitiesExample}
   "funFact": "An interesting fact related to the topic..."
-}`;
+}
+
+If this lesson calls for a picture/sound matching exercise, replace the "activity"
+content block above with this shape instead:
+    { "type": "picture-match", "instruction": "...", "pictureItems": [{ "label": "Drum", "sound": "boom boom" }, { "label": "Bell", "sound": "ring ring" }] }`;
 }
 
 function extractJson(raw: string): GeneratedLesson | null {
@@ -116,6 +125,39 @@ function extractJson(raw: string): GeneratedLesson | null {
   } catch {
     return null;
   }
+}
+
+// Small models don't reliably follow "add this optional field" prompt instructions --
+// confirmed in production: every AI-generated picture/sound lesson since the prompt
+// asked for it came back untagged, and some came back with "items" as an array of
+// objects instead of plain strings (which crashes the renderer -- objects aren't valid
+// React children). Validate the shape server-side rather than trusting the model, and
+// skip (same as today's existing malformed-JSON handling) rather than save bad data.
+function validateLessonShape(lesson: GeneratedLesson): string | null {
+  if (!Array.isArray(lesson.content)) return "content is not an array";
+  for (const block of lesson.content as Record<string, unknown>[]) {
+    if (!block || typeof block !== "object") return "a content block is not an object";
+    if (block.type === "activity" && block.items !== undefined) {
+      if (!Array.isArray(block.items) || block.items.some((i) => typeof i !== "string")) {
+        return `activity block's items must be a flat array of strings, got: ${JSON.stringify(block.items)}`;
+      }
+    }
+    if (block.type === "picture-match") {
+      const items = block.pictureItems;
+      const valid =
+        Array.isArray(items) &&
+        items.length > 0 &&
+        items.every((i) => i && typeof i === "object" && typeof (i as { label?: unknown }).label === "string");
+      if (!valid) {
+        return `picture-match block's pictureItems must be [{label, sound?}], got: ${JSON.stringify(items)}`;
+      }
+    }
+  }
+  if (!Array.isArray(lesson.activities)) return "activities is not an array";
+  for (const act of lesson.activities as Record<string, unknown>[]) {
+    if (!act || typeof act !== "object" || typeof act.type !== "string") return "an activity item is malformed";
+  }
+  return null;
 }
 
 async function generateLessonsForUnit(unitId: string): Promise<number> {
@@ -164,6 +206,12 @@ async function generateLessonsForUnit(unitId: string): Promise<number> {
 
     if (!lesson || !lesson.title || !lesson.content || !lesson.activities) {
       console.warn(`    ⚠️  Malformed lesson response, skipping`);
+      continue;
+    }
+
+    const shapeError = validateLessonShape(lesson);
+    if (shapeError) {
+      console.warn(`    ⚠️  Invalid content shape, skipping: ${shapeError}`);
       continue;
     }
 

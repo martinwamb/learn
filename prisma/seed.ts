@@ -277,7 +277,7 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
           content: [
             { type: "introduction", text: "Close your eyes and listen... What do you hear? Sounds are all around us!" },
             { type: "explanation", text: "Everything that moves makes a sound. Animals, vehicles, instruments — they all have their own sounds.", example: "A dog says 'woof!', a cat says 'meow!', rain goes 'pitter-patter'." },
-            { type: "activity", mediaKind: "sound-match", instruction: "Point to the picture when you hear its sound:", items: ["Drum — boom boom!", "Bell — ring ring!", "Rain — pitter patter!", "Clap — clap clap!"] },
+            { type: "picture-match", instruction: "Point to the picture when you hear its sound:", pictureItems: [{ label: "Drum", sound: "boom boom" }, { label: "Bell", sound: "ring ring" }, { label: "Rain", sound: "pitter patter" }, { label: "Clap", sound: "clap clap" }] },
           ],
           activities: [
             { type: "matching", pairs: [{ left: "Dog", right: "Woof" }, { left: "Cat", right: "Meow" }, { left: "Cow", right: "Moo" }, { left: "Bird", right: "Tweet" }] },
@@ -817,9 +817,13 @@ async function main() {
   console.log("🌱 Seeding CBC curriculum...");
 
   for (const gradeData of grades) {
+    // NOTE: all four upserts below actually update on conflict (not `update: {}`).
+    // Seeding runs on every deploy -- a no-op update silently discards any future
+    // edit to already-seeded data, which is exactly how a `mediaKind` content fix
+    // never reached production last session (the lesson row already existed).
     const grade = await db.grade.upsert({
       where: { code: gradeData.code },
-      update: {},
+      update: { name: gradeData.name, ageRange: gradeData.ageRange, order: gradeData.order },
       create: gradeData,
     });
     console.log(`  ✓ Grade: ${grade.name}`);
@@ -828,7 +832,7 @@ async function main() {
     for (const subjectData of subjects) {
       const subject = await db.subject.upsert({
         where: { gradeId_slug: { gradeId: grade.id, slug: subjectData.slug } },
-        update: {},
+        update: { name: subjectData.name, icon: subjectData.icon, color: subjectData.color },
         create: { ...subjectData, gradeId: grade.id },
       });
 
@@ -838,7 +842,11 @@ async function main() {
       for (const unitData of units) {
         const unit = await db.unit.upsert({
           where: { subjectId_sequence: { subjectId: subject.id, sequence: unitData.sequence } },
-          update: unitData.targetLessonCount != null ? { targetLessonCount: unitData.targetLessonCount } : {},
+          update: {
+            title: unitData.title,
+            outcomes: unitData.outcomes,
+            ...(unitData.targetLessonCount != null ? { targetLessonCount: unitData.targetLessonCount } : {}),
+          },
           create: {
             subjectId: subject.id,
             sequence: unitData.sequence,
@@ -849,9 +857,19 @@ async function main() {
         });
 
         for (const lessonData of unitData.lessons) {
+          // Keyed on unitId+sequence, which only this seed script ever defines --
+          // ai-generated lessons get sequence numbers beyond what's listed here, so
+          // this can never clobber those.
           await db.lesson.upsert({
             where: { unitId_sequence: { unitId: unit.id, sequence: lessonData.sequence } },
-            update: {},
+            update: {
+              title: lessonData.title,
+              objective: lessonData.objective,
+              content: lessonData.content as never,
+              activities: lessonData.activities as never,
+              funFact: lessonData.funFact,
+              source: "seed",
+            },
             create: {
               unitId: unit.id,
               sequence: lessonData.sequence,
