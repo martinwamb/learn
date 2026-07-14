@@ -18,8 +18,10 @@ export interface SaveBookInput {
 // narrate (a real gap found in the original manual save flow, which never fetched
 // text at all). A failure here doesn't block saving the book -- text stays null and
 // a future save (the importer worker resurfacing the same book, or a retry) can
-// backfill it.
-async function fetchStoryText(input: SaveBookInput): Promise<string | null> {
+// backfill it. NOTE: Open Library's "text" is really just its `description` field --
+// a summary blurb, not the book's actual content -- and is empty for most works, so
+// don't expect this source to reliably produce narratable text.
+export async function fetchStoryText(input: SaveBookInput): Promise<string | null> {
   try {
     switch (input.source) {
       case "open-library":
@@ -40,9 +42,10 @@ async function fetchStoryText(input: SaveBookInput): Promise<string | null> {
 
 // Shared by both the manual save API route (app/api/books/save/route.ts) and the
 // automated nightly importer (workers/story-importer.ts) so there's exactly one
-// place the upsert-plus-text-fetch logic lives.
-export async function saveBook(db: PrismaClient, input: SaveBookInput) {
-  const text = await fetchStoryText(input);
+// place the upsert-plus-text-fetch logic lives. `prefetchedText` lets a caller that
+// already fetched text (to decide whether to import at all) avoid a redundant fetch.
+export async function saveBook(db: PrismaClient, input: SaveBookInput, prefetchedText?: string | null) {
+  const text = prefetchedText !== undefined ? prefetchedText : await fetchStoryText(input);
 
   return db.book.upsert({
     where: { source_externalId: { source: input.source, externalId: input.externalId } },

@@ -14,7 +14,7 @@
  */
 import "dotenv/config";
 import { createScriptDb } from "../lib/db-script";
-import { saveBook, type SaveBookInput } from "../lib/books/save";
+import { saveBook, fetchStoryText, type SaveBookInput } from "../lib/books/save";
 import { searchOpenLibrary } from "../lib/books/open-library";
 import { searchGutenberg } from "../lib/books/gutenberg";
 import { searchAfricanStorybook } from "../lib/books/african-storybook";
@@ -53,11 +53,16 @@ async function searchAllSources(query: string): Promise<SaveBookInput[]> {
     searchStoryweaver(query, "English", 1).catch(() => []),
   ]);
 
+  // Order matters: African Storybook and Storyweaver reliably have real page text,
+  // Gutenberg has real (if denser) plaintext, but Open Library's "text" is just its
+  // sparse `description` blurb -- with a low per-run cap, whichever source comes
+  // first tends to fill the whole run, so put the sources that actually produce
+  // narratable text ahead of the one that usually won't.
   return [
     ...asb.map((b) => ({ externalId: b.id, source: "african-storybook", title: b.title, author: b.author, coverUrl: b.cover_image ?? null })),
-    ...ol.map((b) => ({ externalId: b.key, source: "open-library", title: b.title, author: b.author_name?.[0], coverUrl: b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : null })),
-    ...gb.map((b) => ({ externalId: String(b.id), source: "gutenberg", title: b.title, author: b.authors[0]?.name, coverUrl: b.formats["image/jpeg"] ?? null })),
     ...sw.map((b) => ({ externalId: String(b.id), source: "storyweaver", title: b.title, author: b.author, coverUrl: b.cover_image })),
+    ...gb.map((b) => ({ externalId: String(b.id), source: "gutenberg", title: b.title, author: b.authors[0]?.name, coverUrl: b.formats["image/jpeg"] ?? null })),
+    ...ol.map((b) => ({ externalId: b.key, source: "open-library", title: b.title, author: b.author_name?.[0], coverUrl: b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : null })),
   ];
 }
 
@@ -78,10 +83,7 @@ async function run() {
       break;
     }
 
-    // Skip a network round-trip (search results are already fresh) and, more
-    // importantly, skip re-fetching full text for a book we already have --
-    // saveBook() only backfills text when it successfully fetches some, so calling
-    // it again here would just be wasted work for an already-complete row.
+    // Skip a book we already have real text for -- no need to re-fetch or re-save.
     const existing = await db.book.findUnique({
       where: { source_externalId: { source: candidate.source, externalId: candidate.externalId } },
       select: { id: true, text: true },
@@ -89,7 +91,16 @@ async function run() {
     if (existing?.text) continue;
 
     try {
-      await saveBook(db, candidate);
+      // Fetch text FIRST and skip entirely if there isn't any -- the whole point of
+      // this pipeline is books the TTS worker can actually narrate (which requires
+      // non-null text); importing one that can never get audio is dead weight in
+      // the library.
+      const text = await fetchStoryText(candidate);
+      if (!text) {
+        console.log(`  · Skipped "${candidate.title}" [${candidate.source}] — no narratable text available`);
+        continue;
+      }
+      await saveBook(db, candidate, text);
       imported++;
       console.log(`  ✓ "${candidate.title}" [${candidate.source}]`);
     } catch (err) {
