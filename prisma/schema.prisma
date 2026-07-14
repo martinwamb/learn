@@ -19,6 +19,7 @@ model User {
   sessions      Session[]
   profile       UserProfile?
   progress      UserProgress[]
+  emailLogs     EmailLog[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -68,6 +69,7 @@ model UserProfile {
   streak      Int      @default(0)
   totalPoints Int      @default(0)
   lastActive  DateTime @default(now())
+  emailOptIn  Boolean  @default(true) // single flag covers all reminder email types
   updatedAt   DateTime @updatedAt
 }
 
@@ -235,4 +237,15 @@ model ReligiousLesson {
   createdAt  DateTime       @default(now())
 
   @@unique([unitId, sequence])
+}
+
+// ─── Email reminders ──────────────────────────────────────────────────────────
+
+model EmailLog {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    String   // "inactivity" | "digest" | "milestone"
+  subject String
+  sentAt  DateTime @default(now())
 }
