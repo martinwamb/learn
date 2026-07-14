@@ -33,7 +33,7 @@ export function getGutenbergCover(book: GutenbergBook): string | null {
   return book.formats["image/jpeg"] ?? null;
 }
 
-export async function getGutenbergText(book: GutenbergBook): Promise<string | null> {
+async function extractText(book: GutenbergBook): Promise<string | null> {
   const textUrl =
     book.formats["text/plain; charset=utf-8"] ??
     book.formats["text/plain; charset=us-ascii"] ??
@@ -50,4 +50,17 @@ export async function getGutenbergText(book: GutenbergBook): Promise<string | nu
     return text.slice(text.indexOf("\n", start) + 1, end).trim();
   }
   return text.slice(0, 50000).trim(); // cap at 50k chars
+}
+
+export async function getGutenbergText(book: GutenbergBook): Promise<string | null> {
+  return extractText(book);
+}
+
+// By-id variant, for callers (the book-save flow) that only have the externalId on
+// hand, not the full search-result object with format URLs.
+export async function getGutenbergTextById(id: string): Promise<string | null> {
+  const res = await fetch(`https://gutendex.com/books/${id}`);
+  if (!res.ok) return null;
+  const book: GutenbergBook = await res.json();
+  return extractText(book);
 }

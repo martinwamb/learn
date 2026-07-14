@@ -10,6 +10,7 @@
     "seed": "tsx prisma/seed.ts",
     "worker:tts": "tsx workers/tts-worker.ts",
     "worker:lessons": "tsx workers/lesson-generator.ts",
+    "worker:stories": "tsx workers/story-importer.ts",
     "render-animations": "bash scripts/render-animations.sh",
     "download-sounds": "bash scripts/download-sounds.sh"
   },
