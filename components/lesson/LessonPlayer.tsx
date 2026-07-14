@@ -17,8 +17,13 @@ interface Props {
     funFact?: string | null;
     duration: number;
   };
-  gradeCode: string;
-  subjectSlug: string;
+  // Whether narration auto-plays by default (the caller decides based on its own
+  // audience concept -- CBC grade code, Faith Stories age band, etc. -- this
+  // component doesn't need to know any of that).
+  defaultAudioMode: boolean;
+  // Which progress-tracking record this completion should upsert -- see
+  // app/api/lessons/complete/route.ts. Defaults to the original CBC "lesson" type.
+  kind?: "lesson" | "religious-lesson";
 }
 
 const OPTION_STYLES = [
@@ -59,7 +64,7 @@ function isAnswerReady(
   return false;
 }
 
-export default function LessonPlayer({ lesson, gradeCode }: Props) {
+export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson" }: Props) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(false);
@@ -121,7 +126,7 @@ export default function LessonPlayer({ lesson, gradeCode }: Props) {
 
   const player = useLessonPlayer(
     lessonData,
-    gradeCode === "PP1" || gradeCode === "PP2",
+    defaultAudioMode,
     handleAnswered
   );
 
@@ -199,9 +204,9 @@ export default function LessonPlayer({ lesson, gradeCode }: Props) {
     fetch("/api/lessons/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lessonId: lesson.id, score: player.score }),
+      body: JSON.stringify({ lessonId: lesson.id, score: player.score, kind }),
     }).catch(() => {});
-  }, [screen.kind, lesson.id, player.score]);
+  }, [screen.kind, lesson.id, player.score, kind]);
 
   // Reset in-progress answer composition when the screen changes -- render-time
   // state adjustment (not an effect): this is a synchronous derivation from

@@ -35,6 +35,31 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Top-level chooser */}
+      <h2 className="text-xl font-bold text-gray-700 mb-4">What would you like to explore today?</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <Link
+          href={`/lessons/${gradeCode}`}
+          className="bg-gradient-to-br from-orange-100 to-yellow-100 hover:from-orange-200 hover:to-yellow-200 rounded-2xl p-6 flex items-center gap-4 transition-all shadow"
+        >
+          <span className="text-5xl">📚</span>
+          <div>
+            <div className="font-bold text-orange-800 text-lg">CBC Lessons</div>
+            <div className="text-sm text-orange-600">Kenya&apos;s school curriculum, {currentGrade?.name ?? "your grade"}</div>
+          </div>
+        </Link>
+        <Link
+          href="/faith"
+          className="bg-gradient-to-br from-purple-100 to-indigo-100 hover:from-purple-200 hover:to-indigo-200 rounded-2xl p-6 flex items-center gap-4 transition-all shadow"
+        >
+          <span className="text-5xl">🙏</span>
+          <div>
+            <div className="font-bold text-purple-800 text-lg">Faith Stories</div>
+            <div className="text-sm text-purple-600">Stories and lessons from scripture</div>
+          </div>
+        </Link>
+      </div>
+
       {/* Grade Selector */}
       <h2 className="text-xl font-bold text-gray-700 mb-4">Choose your level</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">

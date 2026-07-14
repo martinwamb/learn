@@ -72,22 +72,25 @@ model UserProfile {
 }
 
 model UserProgress {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lessonId    String?
-  lesson      Lesson?   @relation(fields: [lessonId], references: [id])
-  bookId      String?
-  book        Book?     @relation(fields: [bookId], references: [id])
-  type        String    // "lesson" | "book"
-  completed   Boolean   @default(false)
-  score       Int?
-  timeSpent   Int?      // seconds
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
+  id                String           @id @default(cuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId          String?
+  lesson            Lesson?          @relation(fields: [lessonId], references: [id])
+  bookId            String?
+  book              Book?            @relation(fields: [bookId], references: [id])
+  religiousLessonId String?
+  religiousLesson   ReligiousLesson? @relation(fields: [religiousLessonId], references: [id])
+  type              String           // "lesson" | "book" | "religious-lesson"
+  completed         Boolean          @default(false)
+  score             Int?
+  timeSpent         Int?             // seconds
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
 
   @@unique([userId, lessonId])
   @@unique([userId, bookId])
+  @@unique([userId, religiousLessonId])
 }
 
 // ─── CBC Curriculum ──────────────────────────────────────────────────────────
@@ -181,4 +184,55 @@ model GeneratorLog {
   booksProcessed  Int      @default(0)
   errors          String[] @default([])
   durationMs      Int      @default(0)
+}
+
+// ─── Faith Stories ────────────────────────────────────────────────────────────
+// Deliberately parallel to (not nested under) the CBC Grade/Subject/Unit/Lesson
+// hierarchy above -- this is a genuinely separate section, not another CBC subject
+// (a generic, values-based "Religious Education" CBC subject already exists
+// per-grade in prisma/seed.ts; this is denominational/scripture-based). Mirrors the
+// existing Book precedent: a second content type with no Grade ancestry, unified
+// with the rest of the app only through UserProgress's nullable-FK-plus-type pattern.
+
+model ReligiousTradition {
+  id    String          @id @default(cuid())
+  slug  String          @unique // "christianity" now; "islam", "hinduism" could follow later
+  name  String
+  icon  String
+  color String
+  units ReligiousUnit[]
+}
+
+model ReligiousUnit {
+  id                String             @id @default(cuid())
+  traditionId       String
+  tradition         ReligiousTradition @relation(fields: [traditionId], references: [id])
+  sequence          Int
+  title             String
+  ageMin            Int
+  ageMax            Int
+  scriptureRef      String?            // e.g. "Genesis 6-9" -- metadata only
+  targetLessonCount Int                @default(10)
+  lessons           ReligiousLesson[]
+
+  @@unique([traditionId, sequence])
+}
+
+model ReligiousLesson {
+  id         String         @id @default(cuid())
+  unitId     String
+  unit       ReligiousUnit  @relation(fields: [unitId], references: [id])
+  sequence   Int
+  title      String
+  objective  String
+  content    Json           // same shape as Lesson.content -- reuses the same player
+  activities Json
+  funFact    String?
+  duration   Int            @default(20)
+  source     String         @default("seed")
+  status     String         @default("published")
+  progress   UserProgress[]
+  createdAt  DateTime       @default(now())
+
+  @@unique([unitId, sequence])
 }

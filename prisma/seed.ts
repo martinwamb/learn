@@ -1,4 +1,5 @@
 import { createScriptDb } from "../lib/db-script";
+import { seedFaith } from "./seed-faith";
 
 const db = createScriptDb();
 
@@ -888,6 +889,8 @@ async function main() {
   }
 
   console.log("✅ Seed complete!");
+
+  await seedFaith(db);
 }
 
 main()

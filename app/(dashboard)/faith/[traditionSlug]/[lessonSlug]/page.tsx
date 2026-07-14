@@ -3,21 +3,21 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import LessonPlayer from "@/components/lesson/LessonPlayer";
 
-export default async function LessonPage({
+export default async function FaithLessonPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ grade: string; subjectSlug: string; lessonSlug: string }>;
+  params: Promise<{ traditionSlug: string }>;
   searchParams: Promise<{ lessonId?: string }>;
 }) {
-  const { grade, subjectSlug } = await params;
+  const { traditionSlug } = await params;
   const { lessonId } = await searchParams;
 
   if (!lessonId) notFound();
 
-  const lesson = await db.lesson.findUnique({
+  const lesson = await db.religiousLesson.findUnique({
     where: { id: lessonId },
-    include: { unit: { include: { subject: { include: { grade: true } } } } },
+    include: { unit: { include: { tradition: true } } },
   });
 
   if (!lesson) notFound();
@@ -26,14 +26,14 @@ export default async function LessonPage({
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="mb-6">
         <Link
-          href={`/lessons/${grade}/${subjectSlug}`}
+          href={`/faith/${traditionSlug}`}
           className="text-orange-500 hover:underline text-sm"
         >
-          ← {lesson.unit.subject.name}
+          ← {lesson.unit.tradition.name}
         </Link>
         <h1 className="text-2xl font-bold text-gray-800 mt-2">{lesson.title}</h1>
         <p className="text-sm text-gray-400">
-          Unit {lesson.unit.sequence}: {lesson.unit.title} • {lesson.duration} min
+          {lesson.unit.title} • {lesson.duration} min
         </p>
       </div>
 
@@ -47,7 +47,8 @@ export default async function LessonPage({
           funFact: lesson.funFact,
           duration: lesson.duration,
         }}
-        defaultAudioMode={grade === "PP1" || grade === "PP2"}
+        defaultAudioMode={lesson.unit.ageMin <= 6}
+        kind="religious-lesson"
       />
     </div>
   );
