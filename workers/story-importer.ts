@@ -53,15 +53,15 @@ async function searchAllSources(query: string): Promise<SaveBookInput[]> {
     searchStoryweaver(query, "English", 1).catch(() => []),
   ]);
 
-  // Order matters: African Storybook and Storyweaver reliably have real page text,
-  // Gutenberg has real (if denser) plaintext, but Open Library's "text" is just its
-  // sparse `description` blurb -- with a low per-run cap, whichever source comes
-  // first tends to fill the whole run, so put the sources that actually produce
-  // narratable text ahead of the one that usually won't.
+  // Order matters: African Storybook, Storyweaver, and Gutenberg reliably have real
+  // page/book text, but Open Library's "text" is just its sparse `description` blurb
+  // -- with a low per-run cap, whichever source comes first tends to fill the whole
+  // run, so put the sources that actually produce narratable text ahead of the one
+  // that usually won't.
   return [
     ...asb.map((b) => ({ externalId: b.id, source: "african-storybook", title: b.title, author: b.author, coverUrl: b.cover_image ?? null })),
     ...sw.map((b) => ({ externalId: String(b.id), source: "storyweaver", title: b.title, author: b.author, coverUrl: b.cover_image })),
-    ...gb.map((b) => ({ externalId: String(b.id), source: "gutenberg", title: b.title, author: b.authors[0]?.name, coverUrl: b.formats["image/jpeg"] ?? null })),
+    ...gb.map((b) => ({ externalId: String(b.id), source: "gutenberg", title: b.title, author: b.author, coverUrl: b.coverUrl })),
     ...ol.map((b) => ({ externalId: b.key, source: "open-library", title: b.title, author: b.author_name?.[0], coverUrl: b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : null })),
   ];
 }

@@ -26,8 +26,8 @@ export async function GET(req: Request) {
             externalId: String(b.id),
             source: "gutenberg",
             title: b.title,
-            author: b.authors[0]?.name,
-            coverUrl: b.formats["image/jpeg"] ?? null,
+            author: b.author,
+            coverUrl: b.coverUrl,
           }));
         case "african-storybook":
           return (await searchAfricanStorybook(q)).map((b) => ({
@@ -46,15 +46,17 @@ export async function GET(req: Request) {
             coverUrl: b.cover_image,
           }));
         default: {
-          const [ol, asb, sw] = await Promise.all([
+          const [ol, asb, sw, gb] = await Promise.all([
             searchOpenLibrary(q || "african children stories", 1),
             searchAfricanStorybook(q),
             searchStoryweaver(q, "English", 1),
+            searchGutenberg(q || "fairy tales", 1),
           ]);
           return [
             ...asb.slice(0, 4).map((b) => ({ externalId: b.id, source: "african-storybook", title: b.title, author: b.author, coverUrl: b.cover_image ?? null })),
             ...ol.slice(0, 4).map((b) => ({ externalId: b.key, source: "open-library", title: b.title, author: b.author_name?.[0], coverUrl: b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : null })),
             ...sw.slice(0, 4).map((b) => ({ externalId: String(b.id), source: "storyweaver", title: b.title, author: b.author, coverUrl: b.cover_image })),
+            ...gb.slice(0, 4).map((b) => ({ externalId: String(b.id), source: "gutenberg", title: b.title, author: b.author, coverUrl: b.coverUrl })),
           ];
         }
       }

@@ -84,11 +84,22 @@ export function parseStoryText(text: string): { segments: TextSegment[]; voiceMa
     }
   }
 
-  // Merge consecutive narration segments to reduce subprocess calls
+  // Merge consecutive narration segments to reduce subprocess calls, but cap the
+  // merged length -- kokoro.ts passes each segment's text as a single spawn() argv
+  // entry, and full-length book sources (e.g. Gutenberg novels, which are almost
+  // entirely narration) blow past the OS argv size limit (spawn EINVAL/E2BIG) if
+  // left unbounded. Page-based sources (African Storybook, Storyweaver) never
+  // approach this cap, so their segmentation is unaffected.
+  const MAX_NARRATION_CHARS = 3000;
   const merged: TextSegment[] = [];
   for (const seg of segments) {
     const last = merged[merged.length - 1];
-    if (last && last.type === "narration" && seg.type === "narration") {
+    if (
+      last &&
+      last.type === "narration" &&
+      seg.type === "narration" &&
+      last.text.length + seg.text.length + 1 <= MAX_NARRATION_CHARS
+    ) {
       last.text += " " + seg.text;
     } else {
       merged.push({ ...seg });
