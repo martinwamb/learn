@@ -9,10 +9,9 @@
 
 import "dotenv/config";
 import { createScriptDb } from "../lib/db-script";
+import { callOllama, extractJson } from "../lib/ollama";
 
 const db = createScriptDb();
-const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:3b";
 const MAX_LESSONS_PER_UNIT = Number(process.env.LESSON_GEN_MAX_PER_UNIT ?? 5);
 // Ceiling on total lessons generated across ALL units in one run, so expanding the
 // curriculum (more units) doesn't spike a single night's Ollama load -- a bigger
@@ -25,23 +24,6 @@ interface GeneratedLesson {
   content: unknown[];
   activities: unknown[];
   funFact?: string;
-}
-
-async function callOllama(prompt: string): Promise<string> {
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt,
-      stream: false,
-      think: false,
-      options: { temperature: 0.7, num_predict: 700 },
-    }),
-  });
-  if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
-  const data = await res.json();
-  return data.response as string;
 }
 
 function buildPrompt(
@@ -115,18 +97,6 @@ content block above with this shape instead:
     { "type": "picture-match", "instruction": "...", "pictureItems": [{ "label": "Drum", "sound": "boom boom" }, { "label": "Bell", "sound": "ring ring" }] }`;
 }
 
-function extractJson(raw: string): GeneratedLesson | null {
-  // Find first { and last } to extract JSON even if model adds extra text
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end === -1) return null;
-  try {
-    return JSON.parse(raw.slice(start, end + 1)) as GeneratedLesson;
-  } catch {
-    return null;
-  }
-}
-
 // Small models don't reliably follow "add this optional field" prompt instructions --
 // confirmed in production: every AI-generated picture/sound lesson since the prompt
 // asked for it came back untagged, and some came back with "items" as an array of
@@ -193,11 +163,11 @@ async function generateLessonsForUnit(unitId: string): Promise<number> {
     let lesson: GeneratedLesson | null = null;
     try {
       const raw = await callOllama(prompt);
-      lesson = extractJson(raw);
+      lesson = extractJson<GeneratedLesson>(raw);
       if (!lesson) {
         // One retry
         const raw2 = await callOllama(prompt + "\n\nRemember: respond with ONLY the JSON object, no other text.");
-        lesson = extractJson(raw2);
+        lesson = extractJson<GeneratedLesson>(raw2);
       }
     } catch (err) {
       console.error(`    ❌ Ollama error: ${err}`);

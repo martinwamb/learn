@@ -168,6 +168,7 @@ model Book {
   audioStatus String         @default("pending") // "pending" | "processing" | "ready" | "failed"
   audioPath   String?        // served path e.g. /audio/books/{id}.mp3
   segmentPlan Json?          // parsed narration/dialogue segments with voice assignments
+  pages       Json?          // [{text, imageQuery}] -- AI-labeled page chunks for illustrations
   progress    UserProgress[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

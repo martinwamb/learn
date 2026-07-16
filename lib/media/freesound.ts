@@ -6,9 +6,10 @@ interface FreesoundResult {
   is_explicit?: boolean;
 }
 
-// Freesound is community-uploaded (unlike Pexels), so unlike pexels.ts this filters
-// explicitly: skip anything flagged is_explicit, and restrict to permissively-licensed
-// results (Attribution / CC0) to keep redistribution clean.
+// Freesound is community-uploaded (unlike Iconscout's curated catalog), so unlike
+// iconscout.ts this filters explicitly: skip anything flagged is_explicit, and
+// restrict to permissively-licensed results (Attribution / CC0) to keep
+// redistribution clean.
 export async function searchSound(query: string): Promise<string | null> {
   if (!FREESOUND_API_KEY) return null;
 

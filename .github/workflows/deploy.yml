@@ -60,6 +60,9 @@ jobs:
             # 01:15 UTC -- clear of every slot above plus port's 02:00 KB sync and
             # publisher-site's 02:30/03:00 jobs.
             pm2 restart learn-story-worker || pm2 start "npm run worker:stories" --name learn-story-worker --cron "15 1 * * *" --no-autorestart
+            # 02:15 UTC -- after story-worker has had time to import new text, clear of
+            # port's 02:00 KB sync and publisher-site's 02:30/03:00 jobs.
+            pm2 restart learn-illustration-worker || pm2 start "npm run worker:illustrations" --name learn-illustration-worker --cron "15 2 * * *" --no-autorestart
             # Lightweight SMTP-only sends, no CPU concern, but kept in the same
             # off-peak block for consistency. Digest is weekly (Sundays only).
             pm2 restart learn-email-inactivity || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
-import { searchPhoto } from "@/lib/media/pexels";
+import { searchIllustration } from "@/lib/media/iconscout";
 import { isQuerySafe } from "@/lib/media/query";
 
 const CACHE_DIR = path.resolve(/* turbopackIgnore: true */ "./public/media/images");
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   if (!isQuerySafe(query)) return NextResponse.json({ error: "query rejected" }, { status: 400 });
 
   const key = createHash("sha256").update(query).digest("hex");
-  const filename = `${key}.jpg`;
+  const filename = `${key}.png`;
   const filePath = path.join(CACHE_DIR, filename);
   const url = `/media/images/${filename}`;
 
@@ -28,11 +28,11 @@ export async function GET(req: Request) {
   }
 
   try {
-    const photoUrl = await searchPhoto(query);
-    if (!photoUrl) return NextResponse.json({ error: "No photo found" }, { status: 404 });
+    const illustrationUrl = await searchIllustration(query);
+    if (!illustrationUrl) return NextResponse.json({ error: "No illustration found" }, { status: 404 });
 
-    const imgRes = await fetch(photoUrl);
-    if (!imgRes.ok) throw new Error(`Pexels image fetch HTTP ${imgRes.status}`);
+    const imgRes = await fetch(illustrationUrl);
+    if (!imgRes.ok) throw new Error(`Iconscout image fetch HTTP ${imgRes.status}`);
     const buffer = Buffer.from(await imgRes.arrayBuffer());
 
     await fs.mkdir(CACHE_DIR, { recursive: true });

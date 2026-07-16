@@ -3,12 +3,20 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import AudioPlayer from "@/components/book/AudioPlayer";
 import AudioStatusBadge from "@/components/book/AudioStatusBadge";
+import MediaImage from "@/components/lesson/MediaImage";
+
+interface BookPage {
+  text: string;
+  imageQuery: string;
+}
 
 export default async function BookPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const book = await db.book.findUnique({ where: { id } });
   if (!book) notFound();
+
+  const pages = Array.isArray(book.pages) ? (book.pages as unknown as BookPage[]) : null;
 
   const sourceLabel: Record<string, string> = {
     "open-library": "Open Library",
@@ -61,7 +69,18 @@ export default async function BookPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Book text */}
-      {book.text ? (
+      {pages && pages.length > 0 ? (
+        <div className="space-y-6">
+          {pages.map((page, i) => (
+            <div key={i} className="bg-white rounded-2xl shadow p-6 flex gap-5 items-start">
+              <MediaImage query={page.imageQuery} className="w-32 h-32 flex-shrink-0" />
+              <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-line">
+                {page.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : book.text ? (
         <div className="bg-white rounded-2xl shadow p-6">
           <h2 className="font-bold text-gray-700 mb-4">Read the Story</h2>
           <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-line">

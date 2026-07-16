@@ -12,7 +12,7 @@ export function deriveMediaQuery(item: string): string {
   return head.replace(/[!?.,]/g, "").trim().toLowerCase();
 }
 
-// Defense-in-depth on top of Pexels/Freesound's own platform moderation --
+// Defense-in-depth on top of Iconscout/Freesound's own platform moderation --
 // queries only ever come from AI-generated or hand-authored lesson content, never
 // raw end-user input, but this catches anything that slips through generation.
 const DENYLIST = [

@@ -14,7 +14,7 @@ interface Result {
 }
 
 // Fetches a cached-or-freshly-looked-up picture for a lesson item via
-// /api/media/image (Pexels-backed). Matches this codebase's existing convention
+// /api/media/image (Iconscout-backed). Matches this codebase's existing convention
 // for externally-sourced images -- see components/book/LibrarySearch.tsx's book
 // covers -- plain <img>, not next/image, since these are locally-cached files.
 export default function MediaImage({ query, alt, className }: Props) {
