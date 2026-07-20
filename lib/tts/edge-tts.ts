@@ -21,7 +21,10 @@ export async function generateSpeech(
   rate: string = DEFAULT_NARRATOR_RATE
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = ["-t", text, "-v", voice, "--rate", rate, "--write-media", outputPath];
+    // --rate must be a single "--rate=-10%" token, not two separate argv entries --
+    // argparse doesn't recognize "-10%" as a negative-number value (only "-10" would
+    // match its negative-number heuristic) and instead errors as an unrecognized option.
+    const args = ["-t", text, "-v", voice, `--rate=${rate}`, "--write-media", outputPath];
     const proc = spawn(EDGE_TTS_BIN, args);
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d.toString(); });
