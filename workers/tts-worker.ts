@@ -1,7 +1,8 @@
 /**
  * TTS Worker — runs as a standalone PM2 process on a nightly cron (02:00 EAT).
  * Fetches books where audioStatus = "pending", generates pre-produced narrative
- * audio using Kokoro TTS (multiple voices), stitches with ffmpeg, saves MP3.
+ * audio using edge-tts (multiple African-English neural voices, network-based,
+ * no local CPU load), stitches with ffmpeg, saves MP3.
  *
  * PM2: pm2 start workers/tts-worker.js --name learn-tts-worker --cron "0 2 * * *"
  */
@@ -11,7 +12,7 @@ import path from "path";
 import { promises as fs } from "fs";
 import { createScriptDb } from "../lib/db-script";
 import { parseStoryText } from "../lib/tts/text-parser";
-import { textToWav } from "../lib/tts/kokoro";
+import { textToMp3Segment } from "../lib/tts/edge-tts";
 import { stitchToMp3 } from "../lib/tts/stitch";
 
 const db = createScriptDb();
@@ -40,12 +41,12 @@ async function processBook(bookId: string): Promise<void> {
     data: { segmentPlan: segments as never },
   });
 
-  // Generate WAV for each segment
-  const wavFiles: string[] = [];
+  // Generate an MP3 for each segment
+  const segmentFiles: string[] = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const wav = await textToWav(seg.text, seg.voice, i);
-    wavFiles.push(wav);
+    const mp3 = await textToMp3Segment(seg.text, seg.voice, i);
+    segmentFiles.push(mp3);
     process.stdout.write(`    segment ${i + 1}/${segments.length}\r`);
   }
   console.log();
@@ -53,7 +54,7 @@ async function processBook(bookId: string): Promise<void> {
   // Stitch into final MP3
   const outputFilename = `${bookId}.mp3`;
   const outputPath = path.join(AUDIO_DIR, outputFilename);
-  await stitchToMp3(wavFiles, outputPath);
+  await stitchToMp3(segmentFiles, outputPath);
 
   const audioPath = `/audio/books/${outputFilename}`;
   await db.book.update({
