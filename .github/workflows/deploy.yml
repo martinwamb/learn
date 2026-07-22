@@ -57,6 +57,12 @@ jobs:
             # racing for CPU with the learn workers at identical times.
             pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "15 23 * * *" --no-autorestart
             pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
+            # 05:05 UTC -- after the CBC lesson worker above so the two Ollama-calling
+            # workers never race. Generates status="draft" Faith Stories lessons only,
+            # never auto-published (see /admin/faith-review). NOT YET ENABLED: per the
+            # rollout plan, verify by running `npm run worker:faith-lessons` once by hand
+            # over SSH and reading the resulting drafts before uncommenting this line.
+            # pm2 restart learn-faith-worker || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
             # 01:15 UTC -- clear of every slot above plus port's 02:00 KB sync and
             # publisher-site's 02:30/03:00 jobs.
             pm2 restart learn-story-worker || pm2 start "npm run worker:stories" --name learn-story-worker --cron "15 1 * * *" --no-autorestart

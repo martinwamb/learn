@@ -1,10 +1,21 @@
 import { createScriptDb } from "../lib/db-script";
+import { topics as christianityTopics, type CurriculumTopic } from "./faith-curriculum/christianity";
+import { topics as islamTopics } from "./faith-curriculum/islam";
 
 type Db = ReturnType<typeof createScriptDb>;
 
 const traditions = [
   { slug: "christianity", name: "Christian Stories", icon: "✝️", color: "#7C3AED" },
+  { slug: "islam", name: "Islamic Stories", icon: "☪️", color: "#0D9488" },
 ];
+
+// Topic-only curriculum outline (title + scriptureRef + teachingPoint, no lesson
+// prose) that workers/faith-lesson-generator.ts expands into draft lessons. See
+// prisma/faith-curriculum/*.ts for the full lists and authoring notes.
+const curriculumByTradition: Record<string, CurriculumTopic[]> = {
+  christianity: christianityTopics,
+  islam: islamTopics,
+};
 
 interface FaithLesson {
   sequence: number;
@@ -21,6 +32,7 @@ interface FaithUnit {
   ageMin: number;
   ageMax: number;
   scriptureRef?: string;
+  teachingPoint: string;
   lessons: FaithLesson[];
 }
 
@@ -33,6 +45,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 4,
       ageMax: 6,
       scriptureRef: "Genesis 1",
+      teachingPoint: "God made everything in the world, and it is all good — we can be thankful for it.",
       lessons: [
         {
           sequence: 1,
@@ -63,6 +76,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 4,
       ageMax: 6,
       scriptureRef: "Genesis 6-9",
+      teachingPoint: "God keeps his promises, even after a difficult time.",
       lessons: [
         {
           sequence: 1,
@@ -93,6 +107,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 4,
       ageMax: 6,
       scriptureRef: "Luke 15:3-7",
+      teachingPoint: "God cares for and values every single person, no matter how small or lost they feel.",
       lessons: [
         {
           sequence: 1,
@@ -119,6 +134,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 7,
       ageMax: 9,
       scriptureRef: "1 Samuel 17",
+      teachingPoint: "With courage and faith in God, we can face things that feel too big for us.",
       lessons: [
         {
           sequence: 1,
@@ -145,6 +161,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 7,
       ageMax: 9,
       scriptureRef: "Daniel 6",
+      teachingPoint: "Staying faithful to what is right is worth it, even when it feels hard or risky.",
       lessons: [
         {
           sequence: 1,
@@ -171,6 +188,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 7,
       ageMax: 9,
       scriptureRef: "Luke 10:25-37",
+      teachingPoint: "Being a good neighbour means helping anyone in need, not just people like us.",
       lessons: [
         {
           sequence: 1,
@@ -196,6 +214,7 @@ const unitsByTradition: Record<string, FaithUnit[]> = {
       ageMin: 7,
       ageMax: 9,
       scriptureRef: "Luke 24",
+      teachingPoint: "Easter is a celebration of hope and new life for Christians.",
       lessons: [
         {
           sequence: 1,
@@ -238,6 +257,9 @@ export async function seedFaith(db: Db) {
           ageMin: unitData.ageMin,
           ageMax: unitData.ageMax,
           scriptureRef: unitData.scriptureRef,
+          teachingPoint: unitData.teachingPoint,
+          targetLessonCount: 1, // one story == one lesson, unlike CBC units -- keeps the AI
+          // worker from treating these hand-authored units as under-stocked (schema default is 10)
         },
         create: {
           traditionId: tradition.id,
@@ -246,6 +268,8 @@ export async function seedFaith(db: Db) {
           ageMin: unitData.ageMin,
           ageMax: unitData.ageMax,
           scriptureRef: unitData.scriptureRef,
+          teachingPoint: unitData.teachingPoint,
+          targetLessonCount: 1,
         },
       });
 
@@ -273,6 +297,40 @@ export async function seedFaith(db: Db) {
         });
       }
       console.log(`    ✓ Unit ${unitData.sequence}: ${unitData.title} (${unitData.lessons.length} lessons)`);
+    }
+
+    // Topic-only curriculum entries -- unit-level metadata only, deliberately no
+    // lesson upsert here. This leaves every one of these units under its
+    // targetLessonCount default (10) with 0 lessons, so workers/faith-lesson-generator.ts
+    // picks them up on its next run and writes a draft lesson for admin review.
+    // Re-running this seed never touches the `lessons` relation, so it's always
+    // safe to re-run after drafts/publishes exist.
+    const curriculumTopics = curriculumByTradition[traditionData.slug] ?? [];
+    for (const topic of curriculumTopics) {
+      await db.religiousUnit.upsert({
+        where: { traditionId_sequence: { traditionId: tradition.id, sequence: topic.sequence } },
+        update: {
+          title: topic.title,
+          ageMin: topic.ageMin,
+          ageMax: topic.ageMax,
+          scriptureRef: topic.scriptureRef,
+          teachingPoint: topic.teachingPoint,
+          targetLessonCount: 1,
+        },
+        create: {
+          traditionId: tradition.id,
+          sequence: topic.sequence,
+          title: topic.title,
+          ageMin: topic.ageMin,
+          ageMax: topic.ageMax,
+          scriptureRef: topic.scriptureRef,
+          teachingPoint: topic.teachingPoint,
+          targetLessonCount: 1,
+        },
+      });
+    }
+    if (curriculumTopics.length > 0) {
+      console.log(`    ✓ ${curriculumTopics.length} curriculum topics queued for AI generation`);
     }
   }
 

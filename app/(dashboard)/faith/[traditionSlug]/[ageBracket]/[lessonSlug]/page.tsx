@@ -7,16 +7,20 @@ export default async function FaithLessonPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ traditionSlug: string }>;
+  params: Promise<{ traditionSlug: string; ageBracket: string }>;
   searchParams: Promise<{ lessonId?: string }>;
 }) {
-  const { traditionSlug } = await params;
+  const { traditionSlug, ageBracket } = await params;
   const { lessonId } = await searchParams;
 
   if (!lessonId) notFound();
 
-  const lesson = await db.religiousLesson.findUnique({
-    where: { id: lessonId },
+  // findFirst (not findUnique) with an explicit status filter -- rather than
+  // combining a non-unique filter into findUnique's where clause -- so a
+  // guessed/leaked draft lessonId 404s for a normal kid session instead of
+  // rendering an unreviewed lesson.
+  const lesson = await db.religiousLesson.findFirst({
+    where: { id: lessonId, status: "published" },
     include: { unit: { include: { tradition: true } } },
   });
 
@@ -26,7 +30,7 @@ export default async function FaithLessonPage({
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="mb-6">
         <Link
-          href={`/faith/${traditionSlug}`}
+          href={`/faith/${traditionSlug}/${ageBracket}`}
           className="text-orange-500 hover:underline text-sm"
         >
           ← {lesson.unit.tradition.name}

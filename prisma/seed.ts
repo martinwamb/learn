@@ -259,6 +259,35 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
       ],
     },
   ],
+  // ── G1 Religious Education ────────────────────────────────────────────────
+  "G1-religious-education": [
+    {
+      sequence: 1,
+      title: "Being Honest",
+      outcomes: [
+        "Explain what it means to be honest",
+        "Give examples of truthful behaviour",
+        "Practise telling the truth even when it is hard",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Telling the Truth",
+          objective: "By the end of this lesson, the learner should be able to explain why telling the truth matters, even when it is hard.",
+          content: [
+            { type: "introduction", text: "Sometimes telling the truth feels hard — but it is always the right thing to do." },
+            { type: "explanation", text: "Being honest means saying what really happened, even if we are afraid we might get in trouble.", example: "If you break a cup by accident, telling a grown-up the truth is braver and better than hiding it." },
+            { type: "activity", instruction: "Think about being honest:", items: ["Why is it hard to tell the truth sometimes?", "How do you feel after telling the truth?", "How can you be honest with a friend today?"] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What should you do if you make a mistake?", options: ["Hide it", "Blame someone else", "Tell the truth about it", "Pretend it didn't happen"], answer: "Tell the truth about it" },
+            { type: "fill_blank", sentence: "Being ___ means telling the truth even when it is hard.", answer: "honest" },
+          ],
+          funFact: "Studies show that people trust and want to be friends with those who are known for telling the truth!",
+        },
+      ],
+    },
+  ],
   // ── PP1 Language ──────────────────────────────────────────────────────────
   "PP1-language": [
     {
@@ -427,6 +456,40 @@ const seedUnits: Record<string, { sequence: number; title: string; outcomes: str
             { type: "multiple_choice", question: "Which two colours mix to make green?", options: ["Red and blue", "Blue and yellow", "Red and yellow", "Blue and white"], answer: "Blue and yellow" },
           ],
           funFact: "Rainbows always show their colours in the very same order!",
+        },
+      ],
+    },
+  ],
+  // ── PP1 Religious Education ───────────────────────────────────────────────
+  "PP1-religious-education": [
+    {
+      sequence: 1,
+      title: "Saying Thank You",
+      outcomes: [
+        "Name good things they are thankful for",
+        "Say thank you to family and friends",
+        "Show gratitude through kind words",
+      ],
+      lessons: [
+        {
+          sequence: 1,
+          title: "Thank You for Good Things",
+          objective: "By the end of this lesson, the learner should be able to name things they are thankful for and say thank you.",
+          content: [
+            { type: "introduction", text: "We have so many good things around us — food, family, friends, and sunshine! Let's say thank you for them." },
+            { type: "explanation", text: "Saying 'thank you' shows we notice and appreciate the good things others do for us.", example: "When Mama gives you food, saying 'asante' or 'thank you' makes her happy too." },
+            { type: "picture-match", instruction: "Point to something you are thankful for:", pictureItems: [
+              { label: "Family" },
+              { label: "Food" },
+              { label: "Sun" },
+              { label: "Friend" },
+            ] },
+          ],
+          activities: [
+            { type: "multiple_choice", question: "What do we say when someone gives us something kind?", options: ["Sorry", "Thank you", "Goodbye", "Nothing"], answer: "Thank you" },
+            { type: "multiple_choice", question: "Who can we say thank you to?", options: ["Only teachers", "Only family", "Anyone who is kind to us", "No one"], answer: "Anyone who is kind to us" },
+          ],
+          funFact: "Saying thank you doesn't just make others feel good — it makes the person saying it feel happier too!",
         },
       ],
     },

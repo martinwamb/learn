@@ -180,7 +180,7 @@ model Book {
 
 model GeneratorLog {
   id              String   @id @default(cuid())
-  workerType      String   // "tts" | "lesson"
+  workerType      String   // "tts" | "lesson" | "faith-lesson"
   ranAt           DateTime @default(now())
   unitsProcessed  Int      @default(0)
   lessonsCreated  Int      @default(0)
@@ -199,7 +199,7 @@ model GeneratorLog {
 
 model ReligiousTradition {
   id    String          @id @default(cuid())
-  slug  String          @unique // "christianity" now; "islam", "hinduism" could follow later
+  slug  String          @unique // "christianity", "islam" now; "hinduism" could follow later
   name  String
   icon  String
   color String
@@ -215,6 +215,7 @@ model ReligiousUnit {
   ageMin            Int
   ageMax            Int
   scriptureRef      String?            // e.g. "Genesis 6-9" -- metadata only
+  teachingPoint     String             @default("") // fixed "key message" fed to the AI worker prompt -- analogous to Unit.outcomes, but a single non-negotiable sentence the model must teach, not invent. Empty string means "not yet authored" -- the worker skips units with no teachingPoint rather than generating an unconstrained retelling.
   targetLessonCount Int                @default(10)
   lessons           ReligiousLesson[]
 

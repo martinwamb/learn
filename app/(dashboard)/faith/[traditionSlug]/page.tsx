@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { AGE_BRACKETS } from "@/lib/faith-age-brackets";
 
 export default async function TraditionPage({
   params,
@@ -9,39 +9,24 @@ export default async function TraditionPage({
   params: Promise<{ traditionSlug: string }>;
 }) {
   const { traditionSlug } = await params;
-  const session = await auth();
 
   const tradition = await db.religiousTradition.findUnique({
     where: { slug: traditionSlug },
-    include: {
-      units: {
-        include: {
-          lessons: {
-            orderBy: { sequence: "asc" },
-            select: { id: true, title: true, sequence: true, duration: true, source: true },
-          },
-        },
-        orderBy: { sequence: "asc" },
-      },
-    },
   });
 
   if (!tradition) notFound();
 
-  const completedIds = new Set(
-    (
-      await db.userProgress.findMany({
+  // Count published stories per bracket so a bracket with nothing published yet
+  // can still be shown (with a "coming soon" count) rather than silently hidden.
+  const bracketCounts = await Promise.all(
+    AGE_BRACKETS.map((bracket) =>
+      db.religiousLesson.count({
         where: {
-          userId: session!.user!.id,
-          completed: true,
-          type: "religious-lesson",
-          religiousLesson: { unit: { traditionId: tradition.id } },
+          status: "published",
+          unit: { traditionId: tradition.id, ageMin: bracket.ageMin, ageMax: bracket.ageMax },
         },
-        select: { religiousLessonId: true },
       })
     )
-      .map((p) => p.religiousLessonId)
-      .filter(Boolean) as string[]
   );
 
   return (
@@ -54,43 +39,25 @@ export default async function TraditionPage({
           <span className="text-4xl">{tradition.icon}</span>
           <div>
             <h1 className="text-3xl font-bold text-gray-800">{tradition.name}</h1>
-            <p className="text-gray-400">{tradition.units.length} units</p>
+            <p className="text-gray-400">Choose an age group</p>
           </div>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {tradition.units.map((unit) => (
-          <div key={unit.id} className="bg-white rounded-2xl shadow p-5">
-            <h2 className="font-bold text-gray-700 text-lg mb-1">{unit.title}</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              Ages {unit.ageMin}-{unit.ageMax} • {unit.lessons.length} {unit.lessons.length === 1 ? "lesson" : "lessons"}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        {AGE_BRACKETS.map((bracket, idx) => (
+          <Link
+            key={bracket.slug}
+            href={`/faith/${traditionSlug}/${bracket.slug}`}
+            className="bg-white rounded-2xl p-6 shadow hover:shadow-md transition-all hover:scale-[1.02] border border-gray-100"
+            style={{ borderLeft: `5px solid ${tradition.color}` }}
+          >
+            <h2 className="font-bold text-gray-800 text-lg leading-tight">{bracket.label}</h2>
+            <p className="text-sm text-gray-400 mt-1">
+              Ages {bracket.ageMin}-{bracket.ageMax} • {bracketCounts[idx]} {bracketCounts[idx] === 1 ? "story" : "stories"}
             </p>
-
-            <div className="space-y-2">
-              {unit.lessons.map((lesson, idx) => {
-                const done = completedIds.has(lesson.id);
-                const lessonSlug = `lesson-${lesson.sequence}`;
-                return (
-                  <Link
-                    key={lesson.id}
-                    href={`/faith/${traditionSlug}/${lessonSlug}?lessonId=${lesson.id}`}
-                    className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                      done
-                        ? "bg-green-50 border border-green-200"
-                        : "bg-gray-50 hover:bg-orange-50 border border-transparent hover:border-orange-200"
-                    }`}
-                  >
-                    <span className="text-xl">{done ? "✅" : idx === 0 ? "▶️" : "📄"}</span>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-700 text-sm">{lesson.title}</div>
-                      <div className="text-xs text-gray-400">{lesson.duration} min</div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
+            <div className="text-sm text-gray-500 mt-3">Tap to explore →</div>
+          </Link>
         ))}
       </div>
     </div>
