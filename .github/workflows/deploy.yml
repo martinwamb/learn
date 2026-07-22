@@ -49,9 +49,11 @@ jobs:
             npm run build
 
             echo "--- Restarting PM2 processes ---"
-            # -p 3006 is required here (not just in nginx/.env) because `next start` binds
-            # its HTTP server before .env is parsed -- PORT cannot be set via .env alone.
-            pm2 restart learn || pm2 start npm --name learn -- start -- -p 3006
+            # ecosystem.config.js runs `next start` directly (not wrapped in npm), so PM2
+            # tracks the real server PID and signal delivery works -- npm's wrapper process
+            # was swallowing restart signals, leaving orphaned next-server children bound to
+            # port 3006 while PM2 endlessly respawned a new npm wrapper on top of them.
+            pm2 startOrReload ecosystem.config.js --only learn --update-env
             # 23:15 / 04:30 UTC (not 02:00 / 03:00) to avoid colliding with port's and
             # publisher-site's own nightly cron jobs at those exact minutes -- both were found
             # racing for CPU with the learn workers at identical times.

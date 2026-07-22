@@ -1,10 +1,10 @@
-import { buildCharacterMap, type CharacterVoiceMap, type KokoroVoice, NARRATOR_VOICE } from "./voice-map";
+import { buildCharacterMap, type CharacterVoiceMap, type NarratorVoice, NARRATOR_VOICE } from "./voice-map";
 
 export interface TextSegment {
   type: "narration" | "dialogue";
   text: string;
   character?: string;
-  voice: KokoroVoice;
+  voice: NarratorVoice;
 }
 
 // Patterns to identify dialogue and its speaker
@@ -85,7 +85,7 @@ export function parseStoryText(text: string): { segments: TextSegment[]; voiceMa
   }
 
   // Merge consecutive narration segments to reduce subprocess calls, but cap the
-  // merged length -- kokoro.ts passes each segment's text as a single spawn() argv
+  // merged length -- edge-tts.ts passes each segment's text as a single spawn() argv
   // entry, and full-length book sources (e.g. Gutenberg novels, which are almost
   // entirely narration) blow past the OS argv size limit (spawn EINVAL/E2BIG) if
   // left unbounded. Page-based sources (African Storybook, Storyweaver) never

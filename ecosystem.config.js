@@ -1,0 +1,21 @@
+module.exports = {
+  apps: [{
+    name: 'learn',
+    cwd: '/home/admin/apps/learn',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start -p 3006',
+    interpreter: 'node',
+    exec_mode: 'fork',
+    instances: 1,
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '30s',
+    restart_delay: 5000,
+    kill_timeout: 8000,
+    env: { NODE_ENV: 'production', PORT: '3006' },
+    out_file: '/home/admin/logs/learn-out.log',
+    error_file: '/home/admin/logs/learn-error.log',
+    merge_logs: true,
+    time: true,
+  }],
+}

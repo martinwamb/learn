@@ -3,15 +3,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 
-// Takes an ordered list of WAV file paths, concatenates them into a single MP3
-// using ffmpeg, saves to outputPath, cleans up temp WAV files.
-export async function stitchToMp3(wavFiles: string[], outputPath: string): Promise<void> {
-  if (wavFiles.length === 0) throw new Error("No WAV segments to stitch");
+// Takes an ordered list of audio segment file paths (any format ffmpeg can decode
+// -- MP3 segments from edge-tts, previously WAV from Kokoro), concatenates them
+// into a single MP3 using ffmpeg, saves to outputPath, cleans up temp files.
+export async function stitchToMp3(segmentFiles: string[], outputPath: string): Promise<void> {
+  if (segmentFiles.length === 0) throw new Error("No audio segments to stitch");
 
   // Write ffmpeg concat list
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "learn-stitch-"));
   const listPath = path.join(tmpDir, "concat.txt");
-  const listContent = wavFiles.map((f) => `file '${f.replace(/'/g, "\\'")}'`).join("\n");
+  const listContent = segmentFiles.map((f) => `file '${f.replace(/'/g, "\\'")}'`).join("\n");
   await fs.writeFile(listPath, listContent, "utf8");
 
   await new Promise<void>((resolve, reject) => {
@@ -35,7 +36,7 @@ export async function stitchToMp3(wavFiles: string[], outputPath: string): Promi
 
   // Clean up temp files
   await fs.rm(tmpDir, { recursive: true, force: true });
-  for (const wav of wavFiles) {
-    await fs.rm(path.dirname(wav), { recursive: true, force: true }).catch(() => {});
+  for (const segment of segmentFiles) {
+    await fs.rm(path.dirname(segment), { recursive: true, force: true }).catch(() => {});
   }
 }
