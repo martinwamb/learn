@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import Link from "next/link";
+import { AGE_BRACKETS } from "@/lib/faith-age-brackets";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -8,6 +9,7 @@ export default async function DashboardPage() {
 
   const profile = await db.userProfile.findUnique({ where: { userId } });
   const grades = await db.grade.findMany({ orderBy: { order: "asc" } });
+  const traditions = await db.religiousTradition.findMany({ orderBy: { name: "asc" } });
 
   // Total lessons completed this user
   const completedCount = await db.userProgress.count({
@@ -16,6 +18,10 @@ export default async function DashboardPage() {
 
   const gradeCode = profile?.gradeCode ?? "G1";
   const currentGrade = grades.find((g) => g.code === gradeCode);
+  // Pure navigation hint, not a saved preference -- mirrors how the grade grid below
+  // highlights the profile's existing gradeCode without the tiles themselves writing
+  // anything back. PP1/PP2 (ages 4-6) map to the "Early Years" bracket, G1-G3 to "Junior".
+  const recommendedBracketSlug = gradeCode.startsWith("PP") ? "4-6" : "7-9";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -81,6 +87,55 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Faith Stories age-group selector -- same "fast shortcut, not a saved
+          preference" shape as the grade grid above: the highlighted bracket is
+          derived from gradeCode, tapping any tile just jumps into that
+          tradition+bracket's lesson list. */}
+      {traditions.length > 0 && (
+        <>
+          <h2 className="text-xl font-bold text-gray-700 mb-4">Choose your Faith Stories age group</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {traditions.map((tradition) => (
+              <div
+                key={tradition.id}
+                className="bg-white rounded-2xl p-4 shadow border border-gray-100"
+                style={{ borderTop: `4px solid ${tradition.color}` }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-2xl">{tradition.icon}</span>
+                  <span className="font-bold text-gray-800">{tradition.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {AGE_BRACKETS.map((bracket) => {
+                    const isRecommended = bracket.slug === recommendedBracketSlug;
+                    return (
+                      <Link
+                        key={bracket.slug}
+                        href={`/faith/${tradition.slug}/${bracket.slug}`}
+                        className={`rounded-xl p-3 text-center font-semibold text-sm shadow-sm transition-all hover:scale-105 ${
+                          isRecommended ? "text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                        }`}
+                        style={
+                          isRecommended
+                            ? { backgroundColor: tradition.color, boxShadow: `0 0 0 4px ${tradition.color}40` }
+                            : undefined
+                        }
+                      >
+                        <div className="text-xl mb-1">{bracket.ageMin === 4 ? "🐣" : "🌿"}</div>
+                        {bracket.label}
+                        <div className="text-xs font-normal opacity-70">
+                          {bracket.ageMin}-{bracket.ageMax} years
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Quick links */}
       <h2 className="text-xl font-bold text-gray-700 mb-4">Explore</h2>
