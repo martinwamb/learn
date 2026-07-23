@@ -4,6 +4,11 @@
  * Uses Ollama (Qwen 2.5, already on the Hetzner server) to generate
  * new CBC-aligned lessons for units that are below their targetLessonCount.
  *
+ * Generated lessons save as status:"draft", never "published" -- a human must
+ * review and publish them via /admin/cbc-review before kids can see them. Was
+ * auto-publish until spot-checking already-live AI lessons surfaced real problems
+ * (an activity asking about content the lesson never taught, a fabricated detail).
+ *
  * PM2: pm2 start workers/lesson-generator.js --name learn-lesson-worker --cron "30 4 * * *"
  */
 
@@ -169,13 +174,17 @@ async function generateLessonsForUnit(unitId: string): Promise<number> {
         activities: lesson.activities as never,
         funFact: lesson.funFact,
         source: "ai-generated",
-        status: "published",
+        // Draft, not auto-published -- a human reviews and publishes each one via
+        // /admin/cbc-review. Spot-checking already-published AI lessons surfaced real
+        // problems (an activity asking about content the lesson never taught, a
+        // fabricated detail) that auto-publish let straight through to kids.
+        status: "draft",
       },
     });
 
     existingTitles.push(lesson.title);
     created++;
-    console.log(`    ✓ "${lesson.title}"`);
+    console.log(`    ✓ "${lesson.title}" (draft, pending review)`);
   }
 
   return created;

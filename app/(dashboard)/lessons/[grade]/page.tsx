@@ -11,7 +11,7 @@ export default async function GradePage({ params }: { params: Promise<{ grade: s
       subjects: {
         include: {
           _count: { select: { units: true } },
-          units: { include: { _count: { select: { lessons: true } } } },
+          units: { include: { _count: { select: { lessons: { where: { status: "published" } } } } } },
         },
         orderBy: { name: "asc" },
       },

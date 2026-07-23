@@ -4,19 +4,19 @@ import { notFound } from "next/navigation";
 import DraftReviewCard, { type ContentBlock, type ActivityItem } from "@/components/admin/DraftReviewCard";
 import { publishDraft, discardDraft, editAndPublish } from "./actions";
 
-export default async function FaithReviewPage() {
+export default async function CbcReviewPage() {
   if (!(await isAdminSession())) notFound();
 
-  const drafts = await db.religiousLesson.findMany({
+  const drafts = await db.lesson.findMany({
     where: { status: "draft" },
-    include: { unit: { include: { tradition: true } } },
+    include: { unit: { include: { subject: { include: { grade: true } } } } },
     orderBy: [{ createdAt: "asc" }],
   });
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Faith Lesson Review</h1>
+        <h1 className="text-2xl font-bold text-gray-800">CBC Lesson Review</h1>
         <p className="text-gray-400 text-sm">
           {drafts.length} draft{drafts.length === 1 ? "" : "s"} waiting for review
         </p>
@@ -30,8 +30,8 @@ export default async function FaithReviewPage() {
         {drafts.map((lesson) => (
           <DraftReviewCard
             key={lesson.id}
-            icon={lesson.unit.tradition.icon}
-            metaLine={`${lesson.unit.tradition.name} • Ages ${lesson.unit.ageMin}-${lesson.unit.ageMax}${lesson.unit.scriptureRef ? ` • ${lesson.unit.scriptureRef}` : ""}`}
+            icon={lesson.unit.subject.icon}
+            metaLine={`${lesson.unit.subject.grade.name} • ${lesson.unit.subject.name} • Unit ${lesson.unit.sequence}: ${lesson.unit.title}`}
             lesson={{
               id: lesson.id,
               title: lesson.title,

@@ -19,7 +19,10 @@ export default async function SubjectPage({
     include: {
       units: {
         include: {
+          // Critical filter: without this, an unreviewed draft (status:"draft")
+          // would leak straight to kids the moment the AI worker creates it.
           lessons: {
+            where: { status: "published" },
             orderBy: { sequence: "asc" },
             select: { id: true, title: true, sequence: true, duration: true, source: true },
           },

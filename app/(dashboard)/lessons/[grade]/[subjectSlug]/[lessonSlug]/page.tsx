@@ -15,8 +15,12 @@ export default async function LessonPage({
 
   if (!lessonId) notFound();
 
-  const lesson = await db.lesson.findUnique({
-    where: { id: lessonId },
+  // findFirst (not findUnique) with an explicit status filter -- rather than
+  // combining a non-unique filter into findUnique's where clause -- so a
+  // guessed/leaked draft lessonId 404s for a normal kid session instead of
+  // rendering an unreviewed lesson.
+  const lesson = await db.lesson.findFirst({
+    where: { id: lessonId, status: "published" },
     include: { unit: { include: { subject: { include: { grade: true } } } } },
   });
 
