@@ -1,7 +1,10 @@
 /**
  * Faith Lesson Generator Worker — runs nightly at 05:05 UTC via PM2 cron, inside
  * Ollama's 22:00-06:00 UTC active window, after the CBC lesson worker (04:30) so
- * the two Ollama-calling workers never race each other.
+ * the two Ollama-calling workers never race each other. Uses a heavier model
+ * (qwen3:14b, thinking on) than the CBC worker, so each lesson takes ~2-4 minutes
+ * on this CPU-only box instead of under a minute -- still comfortably fits within
+ * the window at MAX_TOTAL_PER_RUN=4 lessons/night.
  *
  * Unlike workers/lesson-generator.ts, this worker does NOT let the model invent
  * what a lesson is about. Every ReligiousUnit's title/scriptureRef/teachingPoint
@@ -24,6 +27,19 @@ const db = createScriptDb();
 // so neither worker starves the other, and deliberately smaller -- there's no benefit
 // generating drafts faster than a single admin can review them.
 const MAX_TOTAL_PER_RUN = Number(process.env.FAITH_LESSON_GEN_MAX_TOTAL_PER_RUN ?? 4);
+
+// Deliberately a heavier model than the CBC worker's qwen2.5:3b, with thinking mode
+// on. Confirmed live, on two different Bible stories (Adam & Eve, Cain & Abel): qwen2.5:3b
+// reliably stopped the retelling right before the story's actual turning point (the
+// disobedience, the jealousy) every time, no matter how the prompt was worded --
+// producing well-formed but pedagogically hollow drafts. qwen3:14b with thinking
+// enabled reliably completed the same stories through to their consequence and tied
+// it back to the teaching point. The CBC worker doesn't have this problem (it invents
+// generic values-based content freely, it isn't trying to faithfully complete one
+// specific pre-existing story), so it stays on the smaller/faster model. This one
+// takes ~2-4 minutes per lesson on this CPU-only box instead of under a minute --
+// fine at this volume (MAX_TOTAL_PER_RUN lessons per night, inside an 8-hour window).
+const FAITH_OLLAMA_MODEL = process.env.FAITH_OLLAMA_MODEL ?? "qwen3:14b";
 
 interface GeneratedFaithLesson {
   objective: string;
@@ -69,6 +85,28 @@ Write ONE lesson retelling this story for this exact title and reference. The le
 - Be warm, simple, and age-appropriate -- suitable for Kenyan children
 - Stay faithful to the fixed title, reference, and teaching point above
 - Use simple language and relatable examples
+- Tell the WHOLE story, not just the setup. Most of these stories turn on a key
+  moment -- a choice, a test, a rescue, a consequence -- and the teaching point
+  above only makes sense once the child hears that moment and what happened
+  because of it. A retelling that stops after introducing the characters and
+  setting, without ever reaching that turning point and its outcome, is
+  incomplete and unusable. Before you finish, check: does the story you wrote
+  actually reach the moment that demonstrates the teaching point, or does it
+  stop short? If it stops short, keep going until it doesn't.
+- Make the connection to the teaching point explicit, in simple words a child
+  could repeat back -- don't just leave it implied by the plot.
+
+Content structure:
+1. { "type": "introduction", "text": "..." } -- one or two sentences setting the scene
+2. { "type": "explanation", "text": "...", "example": "..." } -- "text" must
+   narrate the full story through to its key turning point and outcome, not
+   stop at the setup. "example" must state plainly how that outcome teaches:
+   ${teachingPoint}
+3. Optionally, one more block if it fits naturally: EITHER a memory-verse block
+   (only if this tradition/story has a natural short line worth remembering) OR
+   an "item"/"item-group" block asking the child to recall the key moment in order.
+   Two solid blocks that fully resolve the story are better than three where the
+   third is forced or repeats the same content.
 ${activityGuidance}
 - For a normal "activity" content block, "items" MUST be a flat array of plain
   strings, e.g. ["Touch your nose", "Jump twice"] -- NEVER an array of objects.
@@ -78,7 +116,7 @@ ${activityGuidance}
   "pictureItems": an array of {"label": "...", "sound": "..."} objects. Do NOT use
   a picture of a prophet or any person as a "label" -- use objects, places, or
   animals from the story instead (e.g. "Ark", "Dove", "Lamp", "Star").
-- You MAY also use these two content-block types where they fit naturally:
+- The two extra content-block types mentioned in step 3 above:
   { "type": "memory-verse", "text": "...", "reference": "..." } for a short line
   worth remembering, and { "type": "item", "instruction": "...", "items": ["...", "..."] }
   or { "type": "item-group", "instruction": "...", "items": ["...", "..."] } for a
@@ -130,11 +168,15 @@ async function generateLessonForUnit(unitId: string): Promise<number> {
 
   let lesson: GeneratedFaithLesson | null = null;
   try {
-    const raw = await callOllama(prompt);
+    // Higher than the CBC worker's default (700) and thinking mode on -- confirmed
+    // live that qwen3:14b needs the extra budget for its reasoning pass plus a full
+    // story arc, not just a short activity-focused lesson.
+    const ollamaOpts = { model: FAITH_OLLAMA_MODEL, think: true };
+    const raw = await callOllama(prompt, 2500, ollamaOpts);
     lesson = extractJson<GeneratedFaithLesson>(raw);
     if (!lesson) {
       // One retry
-      const raw2 = await callOllama(prompt + "\n\nRemember: respond with ONLY the JSON object, no other text.");
+      const raw2 = await callOllama(prompt + "\n\nRemember: respond with ONLY the JSON object, no other text.", 2500, ollamaOpts);
       lesson = extractJson<GeneratedFaithLesson>(raw2);
     }
   } catch (err) {

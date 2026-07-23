@@ -1,15 +1,22 @@
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:3b";
 
-export async function callOllama(prompt: string, numPredict = 700): Promise<string> {
+interface CallOllamaOptions {
+  model?: string; // defaults to OLLAMA_MODEL (qwen2.5:3b) -- override for callers needing a different model
+  think?: boolean; // defaults to false. Thinking models (e.g. qwen3) reason before answering,
+  // which costs real latency but reliably completes multi-step narrative tasks that
+  // qwen2.5:3b was confirmed (live, on two different Bible stories) to cut short.
+}
+
+export async function callOllama(prompt: string, numPredict = 700, opts: CallOllamaOptions = {}): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model: opts.model ?? OLLAMA_MODEL,
       prompt,
       stream: false,
-      think: false,
+      think: opts.think ?? false,
       options: { temperature: 0.7, num_predict: numPredict },
     }),
   });
