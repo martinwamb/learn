@@ -64,6 +64,30 @@ function wordBuildFromVocabulary(vocabulary: string[], objective: string): GameS
   return { type: "word-build", title: "Build the word", words: words.slice(0, 6) };
 }
 
+function wordBuildFromFillBlanks(activities: Activity[]): GameSpec | null {
+  // A fill_blank is already "which word completes this sentence" -- rebuilding that word
+  // letter by letter is the same exercise with the spelling made explicit, which is
+  // exactly the reading skill these lessons are for. This is also what gives derivation
+  // reach: plenty of lessons have fill_blanks but no matching activity and no numeric
+  // multiple-choice, and would otherwise end up with no game at all.
+  const words = activities
+    .filter(
+      (a) =>
+        a.type === "fill_blank" &&
+        typeof a.answer === "string" &&
+        typeof a.sentence === "string" &&
+        !a.answer.trim().includes(" ") &&
+        a.answer.trim().length >= 2 &&
+        a.answer.trim().length <= 12
+    )
+    .map((a) => ({
+      word: (a.answer as string).trim(),
+      hint: (a.sentence as string).replace("___", "…").slice(0, 120),
+    }));
+  if (!words.length) return null;
+  return { type: "word-build", title: "Build the missing word", words: words.slice(0, 6) };
+}
+
 export interface DeriveInput extends LessonData {
   /** Stories only -- feeds the Word Builder. */
   vocabulary?: string[];
@@ -77,7 +101,11 @@ export function deriveGames(input: DeriveInput): GameSpec[] {
     pairMatchFromActivities(activities),
     pairMatchFromPictureBlocks(content),
     numberPopFromActivities(activities),
-    input.vocabulary?.length ? wordBuildFromVocabulary(input.vocabulary, input.objective) : null,
+    // A story's own target words beat a sentence-derived guess, so vocabulary wins and
+    // fill_blanks only fill in for content that has none (i.e. every lesson).
+    input.vocabulary?.length
+      ? wordBuildFromVocabulary(input.vocabulary, input.objective)
+      : wordBuildFromFillBlanks(activities),
   ].filter((g): g is GameSpec => g !== null);
 
   // Round-trip through the parser so derived and authored games are held to exactly the

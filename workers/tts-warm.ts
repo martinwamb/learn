@@ -24,10 +24,12 @@ import { ensureAudio, isCached, mapWithConcurrency, resolveEntry } from "../lib/
 
 const db = createScriptDb();
 
-// A full sweep of today's ~180 published lessons is a few thousand clips. Capping the
-// run keeps a single night bounded and predictable; the cache is cumulative, so
-// successive nights converge and then the worker becomes a near-no-op.
-const MAX_PER_RUN = Number(process.env.TTS_WARM_MAX_PER_RUN ?? 400);
+// A full sweep of today's ~200 published items is a few thousand clips. Measured on the
+// server: ~1.1s per clip, so 1200 at concurrency 3 is roughly 7 minutes -- comfortably
+// inside the 03:40 slot, and it converges the whole backlog in about three nights
+// instead of ten. The cache is cumulative, so after that the worker is a near-no-op and
+// only pays for newly published content.
+const MAX_PER_RUN = Number(process.env.TTS_WARM_MAX_PER_RUN ?? 1200);
 // edge-tts is network-bound (WebSocket to Microsoft, no local model), but this box runs
 // six other PM2 apps, so parallelism stays small and `nice`d.
 const CONCURRENCY = Number(process.env.TTS_WARM_CONCURRENCY ?? 3);
