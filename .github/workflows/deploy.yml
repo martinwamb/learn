@@ -49,6 +49,13 @@ jobs:
             npm run build
 
             echo "--- Restarting PM2 processes ---"
+            # NOTE on the `pm2 restart X --cron "..." || pm2 start X --cron "..."` idiom
+            # below: the --cron on the RESTART branch is not redundant. `pm2 restart` alone
+            # reuses the schedule the process was first created with, so once a worker
+            # exists, editing its cron in this file has no effect on the server -- the
+            # `pm2 start` fallback never runs again. That silently stranded learn-tts-warm
+            # on an old schedule after its slot was changed. Passing --cron to restart
+            # reconciles it every deploy, which is the behaviour this file always implied.
             # ecosystem.config.js runs `next start` directly (not wrapped in npm), so PM2
             # tracks the real server PID and signal delivery works -- npm's wrapper process
             # was swallowing restart signals, leaving orphaned next-server children bound to
@@ -70,28 +77,28 @@ jobs:
             # day, and still finishes well before morning use resumes. Being outside
             # Ollama's 22:00-06:00 window doesn't matter -- edge-tts is a network call to
             # Microsoft, not a local model.
-            pm2 restart learn-tts-warm || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *" --no-autorestart
+            pm2 restart learn-tts-warm --cron "15 22 * * *" || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *" --no-autorestart
             # 04:30 UTC (not 03:00) to avoid colliding with port's and publisher-site's own
             # nightly cron jobs at those exact minutes -- both were found racing for CPU
             # with the learn workers at identical times.
-            pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
+            pm2 restart learn-lesson-worker --cron "30 4 * * *" || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
             # 05:05 UTC -- after the CBC lesson worker above so the two Ollama-calling
             # workers never race. Generates status="draft" Faith Stories lessons only,
             # never auto-published (see /admin/faith-review) -- a human still has to
             # publish each one. Verified by hand over SSH first (qwen3:14b, thinking on,
             # MAX_TOTAL_PER_RUN=4 x up to ~4 min/lesson = comfortably inside this slot
             # before Ollama's 06:00 UTC window close, and clear of every other cron above).
-            pm2 restart learn-faith-worker || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
+            pm2 restart learn-faith-worker --cron "5 5 * * *" || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
             # 05:35 UTC -- last of the three Ollama workers, so none of them ever race.
             # Tops each unit up towards targetStoryCount with further Jina stories beyond
             # the hand-authored one, as status="draft" only (see /admin/story-review).
             # qwen3:14b with thinking at ~3-5 min/story x MAX_TOTAL_PER_RUN=3 fits inside
             # the remaining window before Ollama stops at 06:00 UTC.
-            pm2 restart learn-story-gen-worker || pm2 start "npm run worker:story-gen" --name learn-story-gen-worker --cron "35 5 * * *" --no-autorestart
+            pm2 restart learn-story-gen-worker --cron "35 5 * * *" || pm2 start "npm run worker:story-gen" --name learn-story-gen-worker --cron "35 5 * * *" --no-autorestart
             # Lightweight SMTP-only sends, no CPU concern, but kept in the same
             # off-peak block for consistency. Digest is weekly (Sundays only).
-            pm2 restart learn-email-inactivity || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart
-            pm2 restart learn-email-digest || pm2 start "npm run worker:email-digest" --name learn-email-digest --cron "50 1 * * 0" --no-autorestart
+            pm2 restart learn-email-inactivity --cron "45 1 * * *" || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart
+            pm2 restart learn-email-digest --cron "50 1 * * 0" || pm2 start "npm run worker:email-digest" --name learn-email-digest --cron "50 1 * * 0" --no-autorestart
             pm2 save
 
             echo "=== Deploy complete ==="
