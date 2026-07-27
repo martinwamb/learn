@@ -25,17 +25,34 @@ export async function POST(req: Request) {
   if (!lessonId) return NextResponse.json({ error: "Missing lessonId" }, { status: 400 });
 
   const userId = session.user.id;
-  const isReligious = kind === "religious-lesson";
+  // Three content types share this endpoint because they share LessonPlayer. Each has
+  // its own nullable FK on UserProgress (the pattern the Book/ReligiousLesson types
+  // already established) rather than a polymorphic id column, so the database still
+  // enforces that a progress row points at something real.
+  const type: "lesson" | "religious-lesson" | "story" =
+    kind === "religious-lesson" ? "religious-lesson" : kind === "story" ? "story" : "lesson";
+
+  const where =
+    type === "religious-lesson"
+      ? { userId_religiousLessonId: { userId, religiousLessonId: lessonId } }
+      : type === "story"
+      ? { userId_storyId: { userId, storyId: lessonId } }
+      : { userId_lessonId: { userId, lessonId } };
+
+  const fk =
+    type === "religious-lesson"
+      ? { religiousLessonId: lessonId }
+      : type === "story"
+      ? { storyId: lessonId }
+      : { lessonId };
 
   await db.userProgress.upsert({
-    where: isReligious
-      ? { userId_religiousLessonId: { userId, religiousLessonId: lessonId } }
-      : { userId_lessonId: { userId, lessonId } },
+    where,
     update: { completed: true, score, completedAt: new Date() },
     create: {
       userId,
-      ...(isReligious ? { religiousLessonId: lessonId } : { lessonId }),
-      type: isReligious ? "religious-lesson" : "lesson",
+      ...fk,
+      type,
       completed: true,
       score,
       completedAt: new Date(),

@@ -38,6 +38,20 @@ function renderContentBlock(block: ContentBlock, idx: number) {
           &ldquo;{String(block.text ?? "")}&rdquo; — {String(block.reference ?? "")}
         </div>
       );
+    case "story-page":
+      return (
+        <div key={idx} className="text-sm text-gray-700 flex gap-2">
+          <span className="text-gray-300 font-mono shrink-0">{idx + 1}.</span>
+          <div>
+            {String(block.text ?? "")}
+            {block.imageQuery ? (
+              <span className="text-gray-400 text-xs"> [🖼 {String(block.imageQuery)}]</span>
+            ) : (
+              <span className="text-red-500 text-xs"> [no imageQuery]</span>
+            )}
+          </div>
+        </div>
+      );
     case "activity":
     case "item":
     case "item-group":
@@ -90,6 +104,12 @@ interface DraftReviewCardProps {
   lesson: DraftLessonData;
   icon: string;
   metaLine: string;
+  /**
+   * What the content array is called in this queue. Stories store their prose as
+   * `pages`, not `content`, so the label has to follow -- the form field name stays
+   * "content" for all three queues so one card serves them all.
+   */
+  contentLabel?: string;
   publishAction: (formData: FormData) => Promise<void>;
   discardAction: (formData: FormData) => Promise<void>;
   editAndPublishAction: (formData: FormData) => Promise<void>;
@@ -99,6 +119,7 @@ export default function DraftReviewCard({
   lesson,
   icon,
   metaLine,
+  contentLabel = "Content",
   publishAction,
   discardAction,
   editAndPublishAction,
@@ -143,7 +164,7 @@ export default function DraftReviewCard({
             />
           </label>
           <label className="block">
-            <span className="text-xs text-gray-500">Content (JSON)</span>
+            <span className="text-xs text-gray-500">{contentLabel} (JSON)</span>
             <textarea
               name="content"
               defaultValue={JSON.stringify(lesson.content, null, 2)}

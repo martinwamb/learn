@@ -54,10 +54,21 @@ jobs:
             # was swallowing restart signals, leaving orphaned next-server children bound to
             # port 3006 while PM2 endlessly respawned a new npm wrapper on top of them.
             pm2 startOrReload ecosystem.config.js --only learn --update-env
-            # 23:15 / 04:30 UTC (not 02:00 / 03:00) to avoid colliding with port's and
-            # publisher-site's own nightly cron jobs at those exact minutes -- both were found
-            # racing for CPU with the learn workers at identical times.
-            pm2 restart learn-tts-worker || pm2 start "npm run worker:tts" --name learn-tts-worker --cron "15 23 * * *" --no-autorestart
+            # One-time cleanup of the retired book-library workers. The Book table and its
+            # rows stay (UserProgress.bookId still references them); only the import and
+            # audiobook pipeline is gone, replaced by Jina stories + learn-tts-warm below.
+            # `|| true` so a rerun on an already-clean server doesn't fail the deploy.
+            pm2 delete learn-story-worker learn-illustration-worker learn-tts-worker || true
+            # 03:40 UTC -- a free slot (the remaining learn jobs sit at 01:45, 04:30, 05:05
+            # and 05:35), clear of port's 02:00 KB sync and publisher-site's 02:30/03:00
+            # jobs. Pre-generates narration for every published lesson, faith lesson and
+            # story so no child ever waits on an inline edge-tts spawn. This one is
+            # network-bound (edge-tts talks to Microsoft), not an Ollama job, so it does
+            # not need to sit inside Ollama's 22:00-06:00 window.
+            pm2 restart learn-tts-warm || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "40 3 * * *" --no-autorestart
+            # 04:30 UTC (not 03:00) to avoid colliding with port's and publisher-site's own
+            # nightly cron jobs at those exact minutes -- both were found racing for CPU
+            # with the learn workers at identical times.
             pm2 restart learn-lesson-worker || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
             # 05:05 UTC -- after the CBC lesson worker above so the two Ollama-calling
             # workers never race. Generates status="draft" Faith Stories lessons only,
@@ -66,12 +77,12 @@ jobs:
             # MAX_TOTAL_PER_RUN=4 x up to ~4 min/lesson = comfortably inside this slot
             # before Ollama's 06:00 UTC window close, and clear of every other cron above).
             pm2 restart learn-faith-worker || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
-            # 01:15 UTC -- clear of every slot above plus port's 02:00 KB sync and
-            # publisher-site's 02:30/03:00 jobs.
-            pm2 restart learn-story-worker || pm2 start "npm run worker:stories" --name learn-story-worker --cron "15 1 * * *" --no-autorestart
-            # 02:15 UTC -- after story-worker has had time to import new text, clear of
-            # port's 02:00 KB sync and publisher-site's 02:30/03:00 jobs.
-            pm2 restart learn-illustration-worker || pm2 start "npm run worker:illustrations" --name learn-illustration-worker --cron "15 2 * * *" --no-autorestart
+            # 05:35 UTC -- last of the three Ollama workers, so none of them ever race.
+            # Tops each unit up towards targetStoryCount with further Jina stories beyond
+            # the hand-authored one, as status="draft" only (see /admin/story-review).
+            # qwen3:14b with thinking at ~3-5 min/story x MAX_TOTAL_PER_RUN=3 fits inside
+            # the remaining window before Ollama stops at 06:00 UTC.
+            pm2 restart learn-story-gen-worker || pm2 start "npm run worker:story-gen" --name learn-story-gen-worker --cron "35 5 * * *" --no-autorestart
             # Lightweight SMTP-only sends, no CPU concern, but kept in the same
             # off-peak block for consistency. Digest is weekly (Sundays only).
             pm2 restart learn-email-inactivity || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart

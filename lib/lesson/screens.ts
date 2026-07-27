@@ -4,12 +4,18 @@ export interface PictureItem {
 }
 
 export interface ContentBlock {
-  type: "introduction" | "explanation" | "activity" | "picture-match";
+  type: "introduction" | "explanation" | "activity" | "picture-match" | "story-page" | "memory-verse";
   text?: string;
   example?: string;
   instruction?: string;
   items?: string[]; // "activity" only -- plain text, never gets pictures/sound
   pictureItems?: PictureItem[]; // "picture-match" only -- always gets a picture, sound is optional per item
+  // "story-page" only -- one page of a Jina story: a picture and the prose beneath
+  // it. Unlike "picture-match" (where the label IS the thing being taught), here the
+  // text is the content and the picture only illustrates it, so the query is separate.
+  imageQuery?: string;
+  // "memory-verse" only -- the scripture/quote attribution shown under the text.
+  reference?: string;
 }
 
 export interface Activity {
@@ -39,6 +45,7 @@ export interface LessonData {
 export type Screen =
   | { kind: "welcome" }
   | { kind: "content"; blockIdx: number; text: string }
+  | { kind: "story-page"; blockIdx: number; pageNo: number; totalPages: number; text: string; imageQuery?: string }
   | { kind: "item"; blockIdx: number; itemIdx: number; item: string; instruction: string }
   | { kind: "item-group"; blockIdx: number; instruction: string; items: string[] }
   | { kind: "picture-item"; blockIdx: number; itemIdx: number; label: string; sound?: string; instruction: string }
@@ -78,8 +85,40 @@ function asPictureItems(items: unknown): PictureItem[] {
 export function buildScreens(lesson: LessonData): Screen[] {
   const screens: Screen[] = [{ kind: "welcome" }];
 
+  // Story pages carry "page 3 of 10" in their own screen data rather than reusing the
+  // generic screen counter, because the counter includes the welcome/question/complete
+  // screens too -- a child reading a 10-page story should see 10, not 17.
+  const totalPages = lesson.content.filter((b) => b.type === "story-page").length;
+  let pageNo = 0;
+
   lesson.content.forEach((block, blockIdx) => {
-    if (block.type === "introduction") {
+    if (block.type === "story-page") {
+      if (typeof block.text !== "string" || !block.text) return;
+      pageNo += 1;
+      screens.push({
+        kind: "story-page",
+        blockIdx,
+        pageNo,
+        totalPages,
+        text: block.text,
+        imageQuery: typeof block.imageQuery === "string" ? block.imageQuery : undefined,
+      });
+    } else if (block.type === "memory-verse") {
+      // Previously missing: the ContentBlock type, the Screen variant and
+      // LessonPlayer's render branch all existed, but with no branch here
+      // buildScreens never emitted one -- so every memory verse that
+      // prisma/seed-faith.ts seeded and every one the faith worker generated was
+      // silently dropped before it reached a child. It rendered correctly in
+      // /admin/faith-review (which uses DraftReviewCard, not buildScreens), which
+      // is why it looked fine on review and then vanished in the player.
+      if (typeof block.text === "string" && block.text) {
+        screens.push({
+          kind: "memory-verse",
+          text: block.text,
+          reference: typeof block.reference === "string" ? block.reference : "",
+        });
+      }
+    } else if (block.type === "introduction") {
       if (typeof block.text === "string" && block.text) screens.push({ kind: "content", blockIdx, text: block.text });
     } else if (block.type === "explanation") {
       const bodyText = typeof block.text === "string" ? block.text : "";

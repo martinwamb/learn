@@ -27,10 +27,10 @@ export default async function Home() {
             Start Learning
           </Link>
           <Link
-            href="/library"
+            href="/stories"
             className="bg-white hover:bg-orange-50 text-orange-600 font-bold py-4 px-10 rounded-full text-xl shadow border-2 border-orange-200 transition-all hover:scale-105"
           >
-            Browse Books
+            Read with Jina 🦒
           </Link>
         </div>
 

@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import LessonPlayer from "@/components/lesson/LessonPlayer";
+import { resolveGames } from "@/lib/games/derive";
+import { storySlug } from "@/lib/story/slug";
 
 export default async function LessonPage({
   params,
@@ -25,6 +27,21 @@ export default async function LessonPage({
   });
 
   if (!lesson) notFound();
+
+  const games = resolveGames(lesson.games, {
+    title: lesson.title,
+    objective: lesson.objective,
+    content: lesson.content as never,
+    activities: lesson.activities as never,
+  });
+
+  // The unit's own story is the natural "reading reward" for finishing one of its
+  // lessons -- far more useful than the old generic link to the book library.
+  const unitStory = await db.story.findFirst({
+    where: { unitId: lesson.unitId, status: "published" },
+    orderBy: { sequence: "asc" },
+    select: { id: true, title: true },
+  });
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -52,6 +69,13 @@ export default async function LessonPage({
           duration: lesson.duration,
         }}
         defaultAudioMode={grade === "PP1" || grade === "PP2"}
+        games={games}
+        gamesHref={`/games/${grade}`}
+        storyHref={
+          unitStory
+            ? `/stories/${grade}/${storySlug(unitStory.title)}?storyId=${unitStory.id}`
+            : undefined
+        }
       />
     </div>
   );

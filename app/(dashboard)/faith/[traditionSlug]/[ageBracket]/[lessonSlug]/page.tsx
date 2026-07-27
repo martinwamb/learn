@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import LessonPlayer from "@/components/lesson/LessonPlayer";
+import { resolveGames } from "@/lib/games/derive";
 
 export default async function FaithLessonPage({
   params,
@@ -25,6 +26,13 @@ export default async function FaithLessonPage({
   });
 
   if (!lesson) notFound();
+
+  const games = resolveGames(lesson.games, {
+    title: lesson.title,
+    objective: lesson.objective,
+    content: lesson.content as never,
+    activities: lesson.activities as never,
+  });
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -53,6 +61,7 @@ export default async function FaithLessonPage({
         }}
         defaultAudioMode={lesson.unit.ageMin <= 6}
         kind="religious-lesson"
+        games={games}
       />
     </div>
   );

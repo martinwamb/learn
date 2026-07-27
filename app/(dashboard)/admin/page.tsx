@@ -6,9 +6,10 @@ import Link from "next/link";
 export default async function AdminIndexPage() {
   if (!(await isAdminSession())) notFound();
 
-  const [cbcDraftCount, faithDraftCount] = await Promise.all([
+  const [cbcDraftCount, faithDraftCount, storyDraftCount] = await Promise.all([
     db.lesson.count({ where: { status: "draft" } }),
     db.religiousLesson.count({ where: { status: "draft" } }),
+    db.story.count({ where: { status: "draft" } }),
   ]);
 
   return (
@@ -29,6 +30,13 @@ export default async function AdminIndexPage() {
         >
           <div className="font-bold text-gray-800 text-lg">Faith Lesson Review</div>
           <p className="text-sm text-gray-400 mt-1">{faithDraftCount} draft{faithDraftCount === 1 ? "" : "s"} waiting</p>
+        </Link>
+        <Link
+          href="/admin/story-review"
+          className="bg-white rounded-2xl p-6 shadow hover:shadow-md transition-all hover:scale-[1.02] border border-gray-100"
+        >
+          <div className="font-bold text-gray-800 text-lg">Jina Story Review</div>
+          <p className="text-sm text-gray-400 mt-1">{storyDraftCount} draft{storyDraftCount === 1 ? "" : "s"} waiting</p>
         </Link>
       </div>
     </div>
