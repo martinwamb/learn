@@ -1,5 +1,6 @@
 import { createScriptDb } from "../lib/db-script";
 import { seedFaith } from "./seed-faith";
+import { seedStories } from "./seed-stories";
 
 const db = createScriptDb();
 
@@ -952,6 +953,10 @@ async function main() {
   }
 
   console.log("✅ Seed complete!");
+
+  // Stories run after the CBC loop above because each one is attached to a Unit that
+  // loop creates -- on a fresh database the units do not exist until it has finished.
+  await seedStories(db);
 
   await seedFaith(db);
 }

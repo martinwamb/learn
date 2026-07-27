@@ -1,44 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildScreens, type Activity, type LessonData, type Screen } from "@/lib/lesson/screens";
+import { buildScreens, type Activity, type LessonData } from "@/lib/lesson/screens";
+import {
+  CORRECT_PHRASES,
+  REFLECTION_PHRASES,
+  WRONG_PHRASES,
+  collectFeedbackNarrations,
+  collectLessonNarrations,
+  getScreenNarration,
+  resolveScreenText,
+} from "@/lib/lesson/narration";
 
 export type { Activity, ContentBlock, LessonData, Screen } from "@/lib/lesson/screens";
 
 export type QuestionStatus = "narrating" | "waiting" | "feedback";
-
-const CORRECT_PHRASES = [
-  "Correct! Well done!",
-  "Fantastic! You got it!",
-  "Great job! That's right!",
-  "Amazing! You're so clever!",
-  "Yes! Perfect answer!",
-];
-
-const WRONG_PHRASES = [
-  "Not quite — let's keep going!",
-  "Good try! Let's move on.",
-  "Almost! Keep it up!",
-];
-
-const REFLECTION_PHRASES = ["Great thinking!", "Thanks for sharing that!", "Lovely reflection!"];
-
-function buildQuestionText(act: Activity): string {
-  if (act.type === "multiple_choice") {
-    const opts = (act.options ?? []).join(", ");
-    return `${act.question}. Is it: ${opts}?`;
-  }
-  if (act.type === "fill_blank") {
-    return `Complete the sentence: ${act.sentence}. What is the missing word?`;
-  }
-  if (act.type === "matching") {
-    return "Match the words on the left with those on the right.";
-  }
-  if (act.type === "reflection") {
-    return act.prompt ?? "";
-  }
-  return "";
-}
 
 // Reflection activities are always "correct" -- there's no wrong answer, just a
 // prompt to think about. Scoring excludes them separately (see `score` below).
@@ -50,42 +26,6 @@ function isCorrect(act: Activity, given: string): boolean {
   if (act.type === "fill_blank") return g === (act.answer ?? "").toLowerCase();
   if (act.type === "matching") return given === "__all_matched__";
   return false;
-}
-
-function getScreenNarration(screen: Screen, lesson: LessonData): string {
-  switch (screen.kind) {
-    case "welcome":
-      return "";
-    case "content":
-      return screen.text;
-    case "item":
-      return screen.itemIdx === 0 && screen.instruction
-        ? `${screen.instruction} ${screen.item}`
-        : screen.item;
-    case "item-group":
-      return screen.instruction
-        ? `${screen.instruction} ${screen.items.join(". ")}`
-        : screen.items.join(". ");
-    case "picture-item":
-      return screen.itemIdx === 0 && screen.instruction
-        ? `${screen.instruction} ${screen.label}`
-        : screen.label;
-    case "memory-verse":
-      return `${screen.text} — ${screen.reference}`;
-    case "funfact":
-      return `Fun fact: ${screen.text}`;
-    case "question":
-      return buildQuestionText(lesson.activities[screen.actIdx]);
-    case "complete":
-      return "";
-  }
-}
-
-function resolveScreenText(screen: Screen, lesson: LessonData, score: number): string {
-  if (screen.kind === "complete") {
-    return `Amazing work! You finished the lesson and scored ${score} stars! Keep it up!`;
-  }
-  return getScreenNarration(screen, lesson);
 }
 
 export function useLessonPlayer(
@@ -106,10 +46,27 @@ export function useLessonPlayer(
   const answersRef = useRef(answers);
   useEffect(() => { answersRef.current = answers; }, [answers]);
 
+  // narration text -> a <audio> element already loaded with that clip. Populated by the
+  // batch-prepare effect below, so playback is an immediate .play() on decoded audio
+  // rather than a fetch -> JSON -> second fetch -> decode chain at the moment a child
+  // is waiting. A ref (not state) because filling it must not re-render the player.
+  const preloadedRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  // Monotonic counter: every speak() captures the value at call time and bails if it
+  // has moved on by the time its audio is ready. Without it, a slow request for a
+  // screen the child has already tapped past resolves late and plays over the new one.
+  const speakGenRef = useRef(0);
+
   useEffect(() => {
+    const preloaded = preloadedRef.current;
     return () => {
       audioRef.current?.pause();
       recogRef.current?.abort();
+      // Detach sources so a large story's worth of preloaded clips can be collected.
+      for (const audio of preloaded.values()) {
+        audio.pause();
+        audio.src = "";
+      }
+      preloaded.clear();
     };
   }, []);
 
@@ -130,11 +87,16 @@ export function useLessonPlayer(
   }, [answers, screens, lesson.activities]);
 
   // Narration audio is generated server-side (edge-tts, Kenyan neural voice) and
-  // served from a content-addressed cache -- see app/api/tts/speak/route.ts.
+  // served from a content-addressed cache -- see lib/tts/cache.ts. Almost every call
+  // here should hit preloadedRef and start instantly; the fetch path below is the
+  // fallback for text the batch prepare didn't cover (chiefly the completion screen,
+  // whose narration embeds the final score and so can't be known ahead of time).
   const speak = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
       if (!text) { resolve(); return; }
       audioRef.current?.pause();
+
+      const gen = ++speakGenRef.current;
 
       // Safety net: media events can occasionally fail to fire. Estimate reading
       // time at ~65ms/char, min 1.5s, max 30s.
@@ -148,14 +110,26 @@ export function useLessonPlayer(
         resolve();
       };
 
+      const play = (audio: HTMLAudioElement) => {
+        // A newer speak() has started while this clip was being fetched -- drop it
+        // rather than talking over the screen the child is now on.
+        if (gen !== speakGenRef.current) { finish(); return; }
+        audioRef.current = audio;
+        audio.currentTime = 0;
+        audio.onended = finish;
+        audio.onerror = finish;
+        audio.play().catch(finish);
+      };
+
+      const ready = preloadedRef.current.get(text);
+      if (ready) { play(ready); return; }
+
       fetch(`/api/tts/speak?text=${encodeURIComponent(text)}`)
         .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`TTS HTTP ${res.status}`))))
         .then(({ url }: { url: string }) => {
           const audio = new Audio(url);
-          audioRef.current = audio;
-          audio.onended = finish;
-          audio.onerror = finish;
-          audio.play().catch(finish);
+          preloadedRef.current.set(text, audio);
+          play(audio);
         })
         .catch(() => finish());
     });
@@ -209,7 +183,12 @@ export function useLessonPlayer(
 
     speak(text).then(() => {
       if (cancelled) return;
-      if (isQuestion) setQuestionStatus("waiting");
+      // Only promote to "waiting" if the child hasn't already answered. Answering is
+      // now allowed *during* narration (see canInteract in LessonPlayer), and pausing
+      // the clip doesn't fire `onended` -- so this promise can resolve off its fallback
+      // timer well after checkAnswer() already moved the screen to "feedback", and
+      // would otherwise knock it back to "waiting" and re-enable the buttons.
+      if (isQuestion && answersRef.current[screenIdx] == null) setQuestionStatus("waiting");
     });
 
     return () => {
@@ -218,21 +197,51 @@ export function useLessonPlayer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenIdx, audioMode]);
 
-  // Prefetch the next screen's narration audio while the current one is showing, so
-  // forward navigation doesn't have to wait on a cache-miss TTS round trip -- reduces
-  // latency-related playback timing issues. Skips "complete" since its narration
-  // embeds `score`, which may not be final yet if the next screen is the last
-  // unanswered question -- prefetching it here could bake in a stale score.
+  // Prepare the WHOLE lesson's narration in one request when audio mode first turns on,
+  // and load each clip into a real <audio> element so playback later is instant.
+  //
+  // This replaces a per-screen prefetch that had two defects: it fired on every
+  // navigation *alongside* the current screen's own request (so each tap raced two
+  // concurrent edge-tts spawns against each other, making the screen the child was
+  // actually on slower), and it threw the response away without ever downloading the
+  // MP3 -- so a "prefetched" screen still paid a full fetch + decode on entry.
   useEffect(() => {
     if (!audioMode) return;
-    const nextIdx = screenIdx + 1;
-    if (nextIdx >= screens.length) return;
-    const nextScreen = screens[nextIdx];
-    if (nextScreen.kind === "welcome" || nextScreen.kind === "complete") return;
-    const text = getScreenNarration(nextScreen, lesson);
-    if (!text) return;
-    fetch(`/api/tts/speak?text=${encodeURIComponent(text)}`).catch(() => {});
-  }, [screenIdx, audioMode, screens, lesson]);
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const texts = [
+      ...collectLessonNarrations(lesson, screens),
+      ...collectFeedbackNarrations(lesson),
+    ].filter((t) => !preloadedRef.current.has(t));
+    if (!texts.length) return;
+
+    fetch("/api/tts/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts }),
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`TTS HTTP ${res.status}`))))
+      .then(({ urls }: { urls: (string | null)[] }) => {
+        if (cancelled) return;
+        urls.forEach((url, i) => {
+          if (!url) return; // a clip that failed to synthesize falls back to speak()
+          const audio = new Audio(url);
+          // Actually pull the bytes down now, while the child is still on the welcome
+          // screen -- this is the step the old prefetch was missing.
+          audio.preload = "auto";
+          audio.load();
+          preloadedRef.current.set(texts[i], audio);
+        });
+      })
+      .catch(() => {}); // silent: speak() still works, just without the head start
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [audioMode, screens, lesson]);
 
   const canGoNext = !(screen.kind === "question" && answers[screenIdx] == null);
   const canGoBack = screenIdx > 0;

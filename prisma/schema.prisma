@@ -83,7 +83,9 @@ model UserProgress {
   book              Book?            @relation(fields: [bookId], references: [id])
   religiousLessonId String?
   religiousLesson   ReligiousLesson? @relation(fields: [religiousLessonId], references: [id])
-  type              String           // "lesson" | "book" | "religious-lesson"
+  storyId           String?
+  story             Story?           @relation(fields: [storyId], references: [id])
+  type              String           // "lesson" | "book" | "religious-lesson" | "story"
   completed         Boolean          @default(false)
   score             Int?
   timeSpent         Int?             // seconds
@@ -93,6 +95,7 @@ model UserProgress {
   @@unique([userId, lessonId])
   @@unique([userId, bookId])
   @@unique([userId, religiousLessonId])
+  @@unique([userId, storyId])
 }
 
 // ─── CBC Curriculum ──────────────────────────────────────────────────────────
@@ -127,7 +130,9 @@ model Unit {
   title              String
   outcomes           String[] // CBC learning outcomes
   targetLessonCount  Int      @default(10)
+  targetStoryCount   Int      @default(3) // how many Jina stories this unit should end up with -- one is hand-authored, the rest are generated (workers/story-generator.ts)
   lessons            Lesson[]
+  stories            Story[]
 
   @@unique([subjectId, sequence])
 }
@@ -141,12 +146,43 @@ model Lesson {
   objective  String
   content    Json           // array of content blocks
   activities Json           // array of activity items
+  games      Json?          // GameSpec[] -- see lib/games/types.ts. Null means "derive games from content/activities" (lib/games/derive.ts), which is what every pre-existing lesson does.
   funFact    String?
   duration   Int            @default(20) // minutes
   source     String         @default("seed") // "seed" | "ai-generated"
   status     String         @default("published") // "published" | "draft"
   progress   UserProgress[]
   createdAt  DateTime       @default(now())
+
+  @@unique([unitId, sequence])
+}
+
+// ─── Jina Stories ─────────────────────────────────────────────────────────────
+// Original, decodable stories starring the Jina the giraffe mascot, each bound to a
+// CBC Unit and graded in length/vocabulary by that unit's grade. Deliberately NOT the
+// Book model above: Books are whole external texts imported from Gutenberg/Open
+// Library with no curriculum tie and no reading level, which is exactly what made them
+// unusable as reading practice. A Story is short, written for one unit's outcomes, and
+// its pages render through the same LessonPlayer as everything else.
+
+model Story {
+  id           String         @id @default(cuid())
+  unitId       String
+  unit         Unit           @relation(fields: [unitId], references: [id])
+  sequence     Int
+  title        String
+  objective    String         // the reading skill this story reinforces
+  readingLevel String         // "PP1" | "PP2" | "G1" | "G2" | "G3" -- denormalized off the unit's grade so the generator and the validator can apply length/vocabulary rules without a 3-table join
+  pages        Json           // [{ text, imageQuery }] -- one tap-through page each
+  vocabulary   String[]       // target words this story drills, also feeds the Word Builder game
+  activities   Json           // Activity[] -- comprehension questions, same shape as Lesson.activities
+  games        Json?          // GameSpec[] -- see lib/games/types.ts
+  funFact      String?
+  duration     Int            @default(10) // minutes
+  source       String         @default("seed") // "seed" | "ai-generated"
+  status       String         @default("published") // "published" | "draft"
+  progress     UserProgress[]
+  createdAt    DateTime       @default(now())
 
   @@unique([unitId, sequence])
 }
@@ -180,7 +216,7 @@ model Book {
 
 model GeneratorLog {
   id              String   @id @default(cuid())
-  workerType      String   // "tts" | "lesson" | "faith-lesson"
+  workerType      String   // "tts" | "tts-warm" | "lesson" | "faith-lesson" | "story"
   ranAt           DateTime @default(now())
   unitsProcessed  Int      @default(0)
   lessonsCreated  Int      @default(0)
@@ -231,6 +267,7 @@ model ReligiousLesson {
   objective  String
   content    Json           // same shape as Lesson.content -- reuses the same player
   activities Json
+  games      Json?          // GameSpec[] -- see lib/games/types.ts
   funFact    String?
   duration   Int            @default(20)
   source     String         @default("seed")

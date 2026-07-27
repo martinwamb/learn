@@ -46,7 +46,7 @@ export default async function SignInPage() {
         </form>
 
         <p className="text-xs text-gray-400 mt-6">
-          For parents and guardians — your child's learning journey starts here.
+          For parents and guardians — your child&rsquo;s learning journey starts here.
         </p>
       </div>
     </main>

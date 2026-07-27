@@ -151,13 +151,33 @@ export default async function DashboardPage() {
           </div>
         </Link>
         <Link
-          href="/library"
+          href={`/stories/${gradeCode}`}
           className="bg-blue-100 hover:bg-blue-200 rounded-2xl p-5 flex items-center gap-3 transition-all"
         >
-          <span className="text-4xl">📖</span>
+          <span className="text-4xl">🦒</span>
           <div>
-            <div className="font-bold text-blue-800">Story Library</div>
-            <div className="text-sm text-blue-600">Books &amp; Read Aloud</div>
+            <div className="font-bold text-blue-800">Jina&rsquo;s Stories</div>
+            <div className="text-sm text-blue-600">Read along with Jina</div>
+          </div>
+        </Link>
+        <Link
+          href={`/games/${gradeCode}`}
+          className="bg-green-100 hover:bg-green-200 rounded-2xl p-5 flex items-center gap-3 transition-all"
+        >
+          <span className="text-4xl">🎮</span>
+          <div>
+            <div className="font-bold text-green-800">Games</div>
+            <div className="text-sm text-green-600">Practise what you learnt</div>
+          </div>
+        </Link>
+        <Link
+          href="/faith"
+          className="bg-amber-100 hover:bg-amber-200 rounded-2xl p-5 flex items-center gap-3 transition-all"
+        >
+          <span className="text-4xl">🌟</span>
+          <div>
+            <div className="font-bold text-amber-800">Faith Stories</div>
+            <div className="text-sm text-amber-600">Stories and teachings</div>
           </div>
         </Link>
       </div>

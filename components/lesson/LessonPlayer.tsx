@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useLessonPlayer } from "@/hooks/useLessonPlayer";
 import type { Activity, QuestionStatus, Screen } from "@/hooks/useLessonPlayer";
 import MediaImage from "@/components/lesson/MediaImage";
+import GameHost from "@/components/game/GameHost";
 import { seededShuffle } from "@/lib/lesson/shuffle";
+import { GAME_META, type GameSpec } from "@/lib/games/types";
 
 interface Props {
   lesson: {
@@ -23,7 +25,15 @@ interface Props {
   defaultAudioMode: boolean;
   // Which progress-tracking record this completion should upsert -- see
   // app/api/lessons/complete/route.ts. Defaults to the original CBC "lesson" type.
-  kind?: "lesson" | "religious-lesson";
+  kind?: "lesson" | "religious-lesson" | "story";
+  // Games belonging to this content, offered on the completion screen. Resolved by the
+  // caller (authored games, else derived -- see lib/games/derive.ts) so this component
+  // never has to know which of the two it got.
+  games?: GameSpec[];
+  /** Where "more games" links to; omitted when the caller has no hub to point at. */
+  gamesHref?: string;
+  /** Where the "read a story" button on the completion screen goes. */
+  storyHref?: string;
 }
 
 const OPTION_STYLES = [
@@ -64,10 +74,21 @@ function isAnswerReady(
   return false;
 }
 
-export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson" }: Props) {
+export default function LessonPlayer({
+  lesson,
+  defaultAudioMode,
+  kind = "lesson",
+  games = [],
+  gamesHref,
+  storyHref,
+}: Props) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(false);
+  // Which game (if any) the child picked from the completion screen. Playing a game
+  // deliberately happens in place rather than on another route, so the completion is
+  // never navigated away from and the child can come back and pick a second one.
+  const [activeGame, setActiveGame] = useState<GameSpec | null>(null);
   const [selectedOpt, setSelectedOpt] = useState<string | null>(null);
   const [matchMap, setMatchMap] = useState<Record<string, string>>({});
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
@@ -269,7 +290,13 @@ export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson"
     return seededShuffle(rights, player.screenIdx * 2654435761 + rights.length + 1);
   }, [currentAct, player.screenIdx]);
 
-  const canInteract = !player.answer && player.questionStatus === "waiting";
+  // Deliberately allows answering while Jina is still reading the question aloud.
+  // This used to require questionStatus === "waiting", which only arrives when the
+  // narration promise resolves -- and that promise falls back to a timer of up to 30
+  // seconds if synthesis is slow or fails. A failed clip therefore left every answer
+  // button disabled with no visible reason. A child who already knows the answer
+  // should never have to wait for the narrator; tapping just pauses her.
+  const canInteract = !player.answer && player.questionStatus !== "feedback";
   const totalQuestions = (lesson.activities as unknown[]).length;
 
   return (
@@ -297,10 +324,13 @@ export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson"
         </div>
       </div>
 
-      {/* Mascot */}
+      {/* Mascot -- hidden while a game is on screen, which brings its own celebration
+          clip and needs the vertical space for the board. */}
       <video
         ref={videoRef}
         className={`w-48 h-48 rounded-full object-cover shadow-lg border-4 transition-all ${
+          activeGame ? "hidden" : ""
+        } ${
           player.answer?.correct
             ? "border-green-400 shadow-green-200"
             : player.answer && !player.answer.correct
@@ -331,6 +361,24 @@ export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson"
         <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-h-[72px] flex items-center justify-center">
           <p className="text-xl text-gray-700 text-center leading-snug font-medium whitespace-pre-line">
             {screen.kind === "funfact" ? `Fun fact: ${screen.text}` : screen.text}
+          </p>
+        </div>
+      )}
+
+      {/* ── story-page (Jina Stories) ────────────────────────────────────────── */}
+      {screen.kind === "story-page" && (
+        <div className="w-full max-w-md flex flex-col items-center space-y-3">
+          {screen.imageQuery && <MediaImage query={screen.imageQuery} className="w-56 h-56" />}
+          <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            {/* Deliberately larger and looser than a normal content screen: these are
+                children sounding words out, not skimming. leading-relaxed and the wider
+                tracking give the eye a clear path along each line. */}
+            <p className="text-2xl text-gray-800 text-center leading-relaxed tracking-wide font-medium whitespace-pre-line">
+              {screen.text}
+            </p>
+          </div>
+          <p className="text-xs text-gray-400">
+            Page {screen.pageNo} of {screen.totalPages}
           </p>
         </div>
       )}
@@ -542,26 +590,72 @@ export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson"
       )}
 
       {/* ── complete ──────────────────────────────────────────────────────────── */}
-      {screen.kind === "complete" && (
-        <div className="flex flex-col items-center text-center space-y-6">
+      {screen.kind === "complete" && !activeGame && (
+        <div className="flex flex-col items-center text-center space-y-6 w-full max-w-md">
           <div className="text-5xl">🏆</div>
-          <h2 className="text-3xl font-bold text-gray-800">Lesson Complete!</h2>
+          <h2 className="text-3xl font-bold text-gray-800">
+            {kind === "story" ? "Story Finished!" : "Lesson Complete!"}
+          </h2>
           <p className="text-xl text-gray-500">You scored {player.score} stars ⭐</p>
-          <div className="flex gap-3">
+
+          {games.length > 0 && (
+            <div className="w-full space-y-2">
+              <p className="text-sm font-semibold text-gray-500">Now play a game 🎮</p>
+              <div className="grid grid-cols-1 gap-2">
+                {games.map((game, i) => {
+                  const meta = GAME_META[game.type];
+                  return (
+                    <button
+                      key={`${game.type}-${i}`}
+                      onClick={() => setActiveGame(game)}
+                      className="flex items-center gap-3 p-4 rounded-2xl bg-purple-50 border-2 border-purple-200 hover:bg-purple-100 active:scale-95 transition-all text-left"
+                    >
+                      <span className="text-3xl">{meta.emoji}</span>
+                      <div>
+                        <div className="font-bold text-purple-900">{game.title ?? meta.label}</div>
+                        <div className="text-xs text-purple-600">{meta.blurb}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 flex-wrap justify-center">
             <button
               onClick={() => router.back()}
               className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-2xl text-lg transition-colors"
             >
               Back
             </button>
-            <button
-              onClick={() => router.push("/library")}
-              className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-3 px-8 rounded-2xl text-lg transition-colors"
-            >
-              Read a Story 📖
-            </button>
+            {storyHref && (
+              <button
+                onClick={() => router.push(storyHref)}
+                className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-3 px-8 rounded-2xl text-lg transition-colors"
+              >
+                Read a Story 📖
+              </button>
+            )}
+            {gamesHref && (
+              <button
+                onClick={() => router.push(gamesHref)}
+                className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-3 px-8 rounded-2xl text-lg transition-colors"
+              >
+                More Games 🎮
+              </button>
+            )}
           </div>
         </div>
+      )}
+
+      {screen.kind === "complete" && activeGame && (
+        <GameHost
+          game={activeGame}
+          sourceKind={kind}
+          sourceId={lesson.id}
+          onExit={() => setActiveGame(null)}
+        />
       )}
 
       {/* ── Footer nav (Back / Replay / Next) -- hidden on welcome & complete,
@@ -592,13 +686,15 @@ export default function LessonPlayer({ lesson, defaultAudioMode, kind = "lesson"
         </div>
       )}
 
-      {/* Exit button */}
-      <button
-        onClick={() => router.back()}
-        className="text-sm text-gray-400 hover:text-gray-600 underline"
-      >
-        Exit lesson
-      </button>
+      {/* Exit button -- suppressed during a game, which has its own "Done". */}
+      {!activeGame && (
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-gray-400 hover:text-gray-600 underline"
+        >
+          {kind === "story" ? "Exit story" : "Exit lesson"}
+        </button>
+      )}
     </div>
   );
 }

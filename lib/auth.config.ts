@@ -17,10 +17,18 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isAuthPage = nextUrl.pathname.startsWith("/signin");
-      const isDashboardRoute =
-        nextUrl.pathname.startsWith("/dashboard") ||
-        nextUrl.pathname.startsWith("/lessons") ||
-        nextUrl.pathname.startsWith("/library");
+      // Every route under the (dashboard) group. /library is gone (replaced by
+      // /stories); /faith and /admin were never listed here, which left them relying
+      // solely on the layout's own session check -- now they're guarded at the edge
+      // like everything else.
+      const isDashboardRoute = [
+        "/dashboard",
+        "/lessons",
+        "/stories",
+        "/games",
+        "/faith",
+        "/admin",
+      ].some((prefix) => nextUrl.pathname.startsWith(prefix));
 
       if (isDashboardRoute) return isLoggedIn;
       if (isAuthPage && isLoggedIn) {

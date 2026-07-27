@@ -42,14 +42,3 @@ export async function textToMp3(text: string, voice: string = DEFAULT_NARRATOR_V
   await generateSpeech(text, voice, outputPath);
   return outputPath;
 }
-
-// Generate audio for one segment of a multi-segment narration (e.g. a story
-// stitched together from several character/narrator lines), returns the path to
-// the MP3 file in a fresh OS temp dir. Mirrors the old Kokoro textToWav(text,
-// voice, index) shape so callers that loop over segments don't need to change.
-export async function textToMp3Segment(text: string, voice: string, index: number): Promise<string> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "learn-tts-"));
-  const outputPath = path.join(tmpDir, `seg_${index}.mp3`);
-  await generateSpeech(text, voice, outputPath);
-  return outputPath;
-}

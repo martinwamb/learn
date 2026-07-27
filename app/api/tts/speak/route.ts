@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
-import { createHash } from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
-import { generateSpeech, DEFAULT_NARRATOR_VOICE } from "@/lib/tts/edge-tts";
+import { DEFAULT_NARRATOR_VOICE } from "@/lib/tts/edge-tts";
+import { ensureAudio, isCached, resolveEntry, MAX_TEXT_CHARS } from "@/lib/tts/cache";
 
-// Content-addressed cache: identical (text, voice) pairs -- e.g. the fixed
-// CORRECT_PHRASES/WRONG_PHRASES narration lines reused across every lesson -- are only
-// ever synthesized once, not once per lesson play.
-const CACHE_DIR = path.resolve(/* turbopackIgnore: true */ "./public/audio/tts-cache");
-
-function cacheKey(text: string, voice: string): string {
-  return createHash("sha256").update(`${voice}::${text}`).digest("hex");
-}
+// Single-clip narration. The player now batch-prepares a whole lesson's audio up front
+// via /api/tts/prepare, so this route is the fallback path for text that isn't known
+// ahead of time -- chiefly the completion screen, whose narration embeds the final
+// score. Cache semantics, in-flight dedupe and atomic writes all live in lib/tts/cache.
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -21,26 +15,17 @@ export async function GET(req: Request) {
   if (!text) {
     return NextResponse.json({ error: "Missing text" }, { status: 400 });
   }
-  // Lesson narration lines are short; this also keeps the request/cache-file surface bounded.
-  if (text.length > 2000) {
+  if (text.length > MAX_TEXT_CHARS) {
     return NextResponse.json({ error: "text too long" }, { status: 400 });
   }
 
-  const key = cacheKey(text, voice);
-  const filename = `${key}.mp3`;
-  const filePath = path.join(CACHE_DIR, filename);
-  const url = `/audio/tts-cache/${filename}`;
-
-  try {
-    await fs.access(filePath);
-    return NextResponse.json({ url, cached: true });
-  } catch {
-    // cache miss, fall through to generate
+  const entry = resolveEntry(text, voice);
+  if (await isCached(entry)) {
+    return NextResponse.json({ url: entry.url, cached: true });
   }
 
   try {
-    await fs.mkdir(CACHE_DIR, { recursive: true });
-    await generateSpeech(text, voice, filePath);
+    const url = await ensureAudio(text, voice);
     return NextResponse.json({ url, cached: false });
   } catch (err) {
     console.error("TTS speak error:", err);
