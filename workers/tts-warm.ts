@@ -12,7 +12,7 @@
  * browser will later request, which is why the narration text lives in
  * lib/lesson/narration.ts and is imported by both sides rather than duplicated.
  *
- * PM2: pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "40 3 * * *"
+ * PM2: pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *"
  */
 
 import "dotenv/config";
@@ -24,11 +24,12 @@ import { ensureAudio, isCached, mapWithConcurrency, resolveEntry } from "../lib/
 
 const db = createScriptDb();
 
-// A full sweep of today's ~200 published items is a few thousand clips. Measured on the
-// server: ~1.1s per clip, so 1200 at concurrency 3 is roughly 7 minutes -- comfortably
-// inside the 03:40 slot, and it converges the whole backlog in about three nights
-// instead of ten. The cache is cumulative, so after that the worker is a near-no-op and
-// only pays for newly published content.
+// A full sweep of today's ~200 published items is 1864 distinct lines. Measured against
+// production: ~2.4s per clip at concurrency 3 under `nice -n 15` while the app is
+// serving, so 1200 is roughly a 50-minute run and the backlog converges in two nights.
+// The cache is cumulative, so after that this is a near-no-op that only pays for newly
+// published content. If you raise this, check it still fits the cron slot -- see the
+// timing note beside the PM2 line in .github/workflows/deploy.yml.
 const MAX_PER_RUN = Number(process.env.TTS_WARM_MAX_PER_RUN ?? 1200);
 // edge-tts is network-bound (WebSocket to Microsoft, no local model), but this box runs
 // six other PM2 apps, so parallelism stays small and `nice`d.

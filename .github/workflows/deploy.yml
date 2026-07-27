@@ -59,13 +59,18 @@ jobs:
             # audiobook pipeline is gone, replaced by Jina stories + learn-tts-warm below.
             # `|| true` so a rerun on an already-clean server doesn't fail the deploy.
             pm2 delete learn-story-worker learn-illustration-worker learn-tts-worker || true
-            # 03:40 UTC -- a free slot (the remaining learn jobs sit at 01:45, 04:30, 05:05
-            # and 05:35), clear of port's 02:00 KB sync and publisher-site's 02:30/03:00
-            # jobs. Pre-generates narration for every published lesson, faith lesson and
-            # story so no child ever waits on an inline edge-tts spawn. This one is
-            # network-bound (edge-tts talks to Microsoft), not an Ollama job, so it does
-            # not need to sit inside Ollama's 22:00-06:00 window.
-            pm2 restart learn-tts-warm || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "40 3 * * *" --no-autorestart
+            # 22:15 UTC (01:15 EAT). Pre-generates narration for every published lesson,
+            # faith lesson and story so no child ever waits on an inline edge-tts spawn.
+            #
+            # This slot is chosen for length, not just emptiness: measured on this box at
+            # ~2.4s per clip under `nice -n 15`, a full 1200-clip run takes about 50
+            # minutes -- which does NOT fit between an earlier overnight slot and the
+            # 04:30 lesson worker. 22:15 has roughly three clear hours ahead of it (the
+            # next learn job is 01:45), runs long after Kenyan users have stopped for the
+            # day, and still finishes well before morning use resumes. Being outside
+            # Ollama's 22:00-06:00 window doesn't matter -- edge-tts is a network call to
+            # Microsoft, not a local model.
+            pm2 restart learn-tts-warm || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *" --no-autorestart
             # 04:30 UTC (not 03:00) to avoid colliding with port's and publisher-site's own
             # nightly cron jobs at those exact minutes -- both were found racing for CPU
             # with the learn workers at identical times.
