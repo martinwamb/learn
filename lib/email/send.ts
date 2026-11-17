@@ -1,10 +1,10 @@
 import nodemailer from "nodemailer";
 
-// Mirrors publisher-site's working SMTP config against the same self-hosted Mailcow
-// server, sending from a dedicated learn@wambugumartin.com mailbox instead of
-// publisher-site's own (different brand identity -- these shouldn't be mixed).
+// Sends from a dedicated learn@wambugumartin.com address instead of publisher-site's
+// own (different brand identity -- these shouldn't be mixed). Relay is Brevo
+// (EMAIL_SMTP_HOST); without it, the old self-hosted Mailcow host is used.
 const transport = nodemailer.createTransport({
-  host: "mail.wambugumartin.com",
+  host: process.env.EMAIL_SMTP_HOST ?? "mail.wambugumartin.com",
   port: 587,
   secure: false,
   auth: {
