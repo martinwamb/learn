@@ -1,8 +1,9 @@
-name: Deploy to Hetzner
+name: Deploy to home server
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -10,95 +11,106 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Reach the server through the Cloudflare tunnel
+        run: |
+          curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i /tmp/cloudflared.deb > /dev/null
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf 'Host *\n  ProxyCommand cloudflared access ssh --hostname %%h\n  ServerAliveInterval 30\n' >> ~/.ssh/config
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            echo "=== Deploying learn.wambugumartin.com ==="
-            cd /home/admin/apps/learn
+        env:
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          cat > /tmp/deploy.sh <<'DEPLOY_SCRIPT'
+          set -e
+          echo "=== Deploying learn.wambugumartin.com ==="
+          cd /home/admin/apps/learn
 
-            git pull origin main
+          git pull origin main
 
-            echo "--- Installing dependencies ---"
-            npm install
+          echo "--- Installing dependencies ---"
+          npm install
 
-            echo "--- Generating Prisma client ---"
-            npx prisma generate
+          echo "--- Generating Prisma client ---"
+          npx prisma generate
 
-            echo "--- Running database migrations ---"
-            # --accept-data-loss: prisma db push otherwise hard-refuses (exits 1, no
-            # prompt possible in an unattended pipeline) any new unique constraint,
-            # even a provably safe one -- e.g. adding a nullable FK + compound unique
-            # to an existing table, where every current row gets NULL for the new
-            # column and Postgres treats NULLs as non-conflicting. Schema changes are
-            # authored and reviewed in the same commit as this pipeline change, so the
-            # confirmation step doesn't add real safety here, only an unattended stall.
-            npx prisma db push --accept-data-loss
+          echo "--- Running database migrations ---"
+          # --accept-data-loss: prisma db push otherwise hard-refuses (exits 1, no
+          # prompt possible in an unattended pipeline) any new unique constraint,
+          # even a provably safe one -- e.g. adding a nullable FK + compound unique
+          # to an existing table, where every current row gets NULL for the new
+          # column and Postgres treats NULLs as non-conflicting. Schema changes are
+          # authored and reviewed in the same commit as this pipeline change, so the
+          # confirmation step doesn't add real safety here, only an unattended stall.
+          npx prisma db push --accept-data-loss
 
-            echo "--- Seeding curriculum (idempotent upserts) ---"
-            npm run seed
+          echo "--- Seeding curriculum (idempotent upserts) ---"
+          npm run seed
 
-            echo "--- Building Next.js app ---"
-            npm run build
+          echo "--- Building Next.js app ---"
+          npm run build
 
-            echo "--- Restarting PM2 processes ---"
-            # NOTE on the `pm2 restart X --cron "..." || pm2 start X --cron "..."` idiom
-            # below: the --cron on the RESTART branch is not redundant. `pm2 restart` alone
-            # reuses the schedule the process was first created with, so once a worker
-            # exists, editing its cron in this file has no effect on the server -- the
-            # `pm2 start` fallback never runs again. That silently stranded learn-tts-warm
-            # on an old schedule after its slot was changed. Passing --cron to restart
-            # reconciles it every deploy, which is the behaviour this file always implied.
-            # ecosystem.config.js runs `next start` directly (not wrapped in npm), so PM2
-            # tracks the real server PID and signal delivery works -- npm's wrapper process
-            # was swallowing restart signals, leaving orphaned next-server children bound to
-            # port 3006 while PM2 endlessly respawned a new npm wrapper on top of them.
-            pm2 startOrReload ecosystem.config.js --only learn --update-env
-            # One-time cleanup of the retired book-library workers. The Book table and its
-            # rows stay (UserProgress.bookId still references them); only the import and
-            # audiobook pipeline is gone, replaced by Jina stories + learn-tts-warm below.
-            # `|| true` so a rerun on an already-clean server doesn't fail the deploy.
-            pm2 delete learn-story-worker learn-illustration-worker learn-tts-worker || true
-            # 22:15 UTC (01:15 EAT). Pre-generates narration for every published lesson,
-            # faith lesson and story so no child ever waits on an inline edge-tts spawn.
-            #
-            # This slot is chosen for length, not just emptiness: measured on this box at
-            # ~2.4s per clip under `nice -n 15`, a full 1200-clip run takes about 50
-            # minutes -- which does NOT fit between an earlier overnight slot and the
-            # 04:30 lesson worker. 22:15 has roughly three clear hours ahead of it (the
-            # next learn job is 01:45), runs long after Kenyan users have stopped for the
-            # day, and still finishes well before morning use resumes. Being outside
-            # Ollama's 22:00-06:00 window doesn't matter -- edge-tts is a network call to
-            # Microsoft, not a local model.
-            pm2 restart learn-tts-warm --cron "15 22 * * *" || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *" --no-autorestart
-            # 04:30 UTC (not 03:00) to avoid colliding with port's and publisher-site's own
-            # nightly cron jobs at those exact minutes -- both were found racing for CPU
-            # with the learn workers at identical times.
-            pm2 restart learn-lesson-worker --cron "30 4 * * *" || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
-            # 05:05 UTC -- after the CBC lesson worker above so the two Ollama-calling
-            # workers never race. Generates status="draft" Faith Stories lessons only,
-            # never auto-published (see /admin/faith-review) -- a human still has to
-            # publish each one. Verified by hand over SSH first (qwen3:14b, thinking on,
-            # MAX_TOTAL_PER_RUN=4 x up to ~4 min/lesson = comfortably inside this slot
-            # before Ollama's 06:00 UTC window close, and clear of every other cron above).
-            pm2 restart learn-faith-worker --cron "5 5 * * *" || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
-            # 05:35 UTC -- last of the three Ollama workers, so none of them ever race.
-            # Tops each unit up towards targetStoryCount with further Jina stories beyond
-            # the hand-authored one, as status="draft" only (see /admin/story-review).
-            # qwen3:14b with thinking at ~3-5 min/story x MAX_TOTAL_PER_RUN=3 fits inside
-            # the remaining window before Ollama stops at 06:00 UTC.
-            pm2 restart learn-story-gen-worker --cron "35 5 * * *" || pm2 start "npm run worker:story-gen" --name learn-story-gen-worker --cron "35 5 * * *" --no-autorestart
-            # Lightweight SMTP-only sends, no CPU concern, but kept in the same
-            # off-peak block for consistency. Digest is weekly (Sundays only).
-            pm2 restart learn-email-inactivity --cron "45 1 * * *" || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart
-            pm2 restart learn-email-digest --cron "50 1 * * 0" || pm2 start "npm run worker:email-digest" --name learn-email-digest --cron "50 1 * * 0" --no-autorestart
-            pm2 save
+          echo "--- Restarting PM2 processes ---"
+          # NOTE on the `pm2 restart X --cron "..." || pm2 start X --cron "..."` idiom
+          # below: the --cron on the RESTART branch is not redundant. `pm2 restart` alone
+          # reuses the schedule the process was first created with, so once a worker
+          # exists, editing its cron in this file has no effect on the server -- the
+          # `pm2 start` fallback never runs again. That silently stranded learn-tts-warm
+          # on an old schedule after its slot was changed. Passing --cron to restart
+          # reconciles it every deploy, which is the behaviour this file always implied.
+          # ecosystem.config.js runs `next start` directly (not wrapped in npm), so PM2
+          # tracks the real server PID and signal delivery works -- npm's wrapper process
+          # was swallowing restart signals, leaving orphaned next-server children bound to
+          # port 3006 while PM2 endlessly respawned a new npm wrapper on top of them.
+          pm2 startOrReload ecosystem.config.js --only learn --update-env
+          # One-time cleanup of the retired book-library workers. The Book table and its
+          # rows stay (UserProgress.bookId still references them); only the import and
+          # audiobook pipeline is gone, replaced by Jina stories + learn-tts-warm below.
+          # `|| true` so a rerun on an already-clean server doesn't fail the deploy.
+          pm2 delete learn-story-worker learn-illustration-worker learn-tts-worker || true
+          # 22:15 UTC (01:15 EAT). Pre-generates narration for every published lesson,
+          # faith lesson and story so no child ever waits on an inline edge-tts spawn.
+          #
+          # This slot is chosen for length, not just emptiness: measured on this box at
+          # ~2.4s per clip under `nice -n 15`, a full 1200-clip run takes about 50
+          # minutes -- which does NOT fit between an earlier overnight slot and the
+          # 04:30 lesson worker. 22:15 has roughly three clear hours ahead of it (the
+          # next learn job is 01:45), runs long after Kenyan users have stopped for the
+          # day, and still finishes well before morning use resumes. Being outside
+          # Ollama's 22:00-06:00 window doesn't matter -- edge-tts is a network call to
+          # Microsoft, not a local model.
+          pm2 restart learn-tts-warm --cron "15 22 * * *" || pm2 start "npm run worker:tts-warm" --name learn-tts-warm --cron "15 22 * * *" --no-autorestart
+          # 04:30 UTC (not 03:00) to avoid colliding with port's and publisher-site's own
+          # nightly cron jobs at those exact minutes -- both were found racing for CPU
+          # with the learn workers at identical times.
+          pm2 restart learn-lesson-worker --cron "30 4 * * *" || pm2 start "npm run worker:lessons" --name learn-lesson-worker --cron "30 4 * * *" --no-autorestart
+          # 05:05 UTC -- after the CBC lesson worker above so the two Ollama-calling
+          # workers never race. Generates status="draft" Faith Stories lessons only,
+          # never auto-published (see /admin/faith-review) -- a human still has to
+          # publish each one. Verified by hand over SSH first (qwen3:14b, thinking on,
+          # MAX_TOTAL_PER_RUN=4 x up to ~4 min/lesson = comfortably inside this slot
+          # before Ollama's 06:00 UTC window close, and clear of every other cron above).
+          pm2 restart learn-faith-worker --cron "5 5 * * *" || pm2 start "npm run worker:faith-lessons" --name learn-faith-worker --cron "5 5 * * *" --no-autorestart
+          # 05:35 UTC -- last of the three Ollama workers, so none of them ever race.
+          # Tops each unit up towards targetStoryCount with further Jina stories beyond
+          # the hand-authored one, as status="draft" only (see /admin/story-review).
+          # qwen3:14b with thinking at ~3-5 min/story x MAX_TOTAL_PER_RUN=3 fits inside
+          # the remaining window before Ollama stops at 06:00 UTC.
+          pm2 restart learn-story-gen-worker --cron "35 5 * * *" || pm2 start "npm run worker:story-gen" --name learn-story-gen-worker --cron "35 5 * * *" --no-autorestart
+          # Lightweight SMTP-only sends, no CPU concern, but kept in the same
+          # off-peak block for consistency. Digest is weekly (Sundays only).
+          pm2 restart learn-email-inactivity --cron "45 1 * * *" || pm2 start "npm run worker:email-inactivity" --name learn-email-inactivity --cron "45 1 * * *" --no-autorestart
+          pm2 restart learn-email-digest --cron "50 1 * * 0" || pm2 start "npm run worker:email-digest" --name learn-email-digest --cron "50 1 * * 0" --no-autorestart
+          pm2 save
 
-            echo "=== Deploy complete ==="
+          echo "=== Deploy complete ==="
+          DEPLOY_SCRIPT
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'f=$(mktemp) && cat > "$f" && bash "$f" < /dev/null; rc=$?; rm -f "$f"; exit $rc' < /tmp/deploy.sh
